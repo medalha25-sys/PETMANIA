@@ -1,0 +1,7 @@
+{
+  "name": "PetManager Pro",
+  "description": "A comprehensive pet shop management system featuring scheduling, client tracking, service catalog, and a dynamic appointment calendar.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
