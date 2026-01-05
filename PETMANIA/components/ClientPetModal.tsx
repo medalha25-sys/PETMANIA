@@ -61,7 +61,7 @@ const ClientPetModal: React.FC<ClientPetModalProps> = ({ isOpen, onClose, onSucc
             const petData = {
                 name,
                 species,
-                sex,
+                gender: sex,
                 breed,
                 birth_date: birthDate || null,
                 weight: weight ? parseFloat(weight) : null,
