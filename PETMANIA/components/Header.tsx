@@ -7,9 +7,10 @@ interface HeaderProps {
     setDarkMode: (dark: boolean) => void;
     userEmail?: string;
     onLogout?: () => Promise<void>;
+    isClientPortal?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail, onLogout, isClientPortal = false }) => {
     const [loading, setLoading] = useState(false);
     const [userName, setUserName] = useState<string>('Admin');
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -164,7 +165,7 @@ const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail, onLog
                                     <div className="p-2 space-y-1">
                                         <button
                                             onClick={() => { setShowSwitchUser(true); setShowMenu(false); }}
-                                            className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group text-left"
+                                            className={`flex items-center gap-3 w-full p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group text-left ${isClientPortal ? 'hidden' : ''}`}
                                         >
                                             <div className="size-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center group-hover:bg-blue-100 group-hover:text-blue-600 dark:group-hover:bg-blue-900/30 dark:group-hover:text-blue-400 transition-colors">
                                                 <span className="material-symbols-outlined text-sm">switch_account</span>

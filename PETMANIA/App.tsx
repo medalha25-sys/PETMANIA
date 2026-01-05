@@ -13,6 +13,9 @@ import SettingsPage from './pages/SettingsPage';
 import Financeiro from './pages/Financeiro';
 import DrexPage from './pages/DrexPage';
 import ProductsPage from './pages/ProductsPage';
+import ClientLayout from './components/ClientLayout';
+import ClientDashboard from './pages/ClientDashboard';
+import ClientScheduling from './pages/ClientScheduling';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -26,20 +29,39 @@ const App: React.FC = () => {
     return false;
   });
 
+  const [userRole, setUserRole] = useState<'admin' | 'employee' | 'client' | null>(null);
+
   useEffect(() => {
     // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (session) fetchUserRole(session.user.id);
       setLoading(false);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session) fetchUserRole(session.user.id);
+      else setUserRole(null);
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const fetchUserRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      if (data) setUserRole(data.role);
+    } catch (error) {
+      console.error("Error fetching role:", error);
+    }
+  };
 
   useEffect(() => {
     if (darkMode) {
@@ -78,26 +100,41 @@ const App: React.FC = () => {
           path="/*"
           element={
             session || isGuest ? (
-              <Layout
-                darkMode={darkMode}
-                setDarkMode={setDarkMode}
-                userEmail={session?.user.email || 'Visitante'}
-                isGuest={isGuest}
-                onLogout={handleLogout}
-              >
-                <Routes>
-                  <Route path="/" element={<Dashboard isGuest={isGuest} />} />
-                  <Route path="/clientes" element={<Clients />} />
-                  <Route path="/pets" element={<PetsPage />} />
-                  <Route path="/produtos" element={<ProductsPage />} />
-                  <Route path="/servicos" element={<ServicesPage />} />
-                  <Route path="/agenda" element={<Agenda />} />
-                  <Route path="/configuracoes" element={<SettingsPage darkMode={darkMode} setDarkMode={setDarkMode} />} />
-                  <Route path="/financeiro" element={<Financeiro />} />
-                  <Route path="/drex" element={<DrexPage />} />
-                  <Route path="*" element={<Navigate to="/" />} />
-                </Routes>
-              </Layout>
+              userRole === 'client' ? (
+                <ClientLayout
+                  darkMode={darkMode}
+                  setDarkMode={setDarkMode}
+                  userEmail={session?.user.email || 'Cliente'}
+                  onLogout={handleLogout}
+                >
+                  <Routes>
+                    <Route path="/portal" element={<ClientDashboard />} />
+                    <Route path="/agendar" element={<ClientScheduling />} />
+                    <Route path="*" element={<Navigate to="/portal" replace />} />
+                  </Routes>
+                </ClientLayout>
+              ) : (
+                <Layout
+                  darkMode={darkMode}
+                  setDarkMode={setDarkMode}
+                  userEmail={session?.user.email || 'Visitante'}
+                  isGuest={isGuest}
+                  onLogout={handleLogout}
+                >
+                  <Routes>
+                    <Route path="/" element={<Dashboard isGuest={isGuest} />} />
+                    <Route path="/clientes" element={<Clients />} />
+                    <Route path="/pets" element={<PetsPage />} />
+                    <Route path="/produtos" element={<ProductsPage />} />
+                    <Route path="/servicos" element={<ServicesPage />} />
+                    <Route path="/agenda" element={<Agenda />} />
+                    <Route path="/configuracoes" element={<SettingsPage darkMode={darkMode} setDarkMode={setDarkMode} />} />
+                    <Route path="/financeiro" element={<Financeiro />} />
+                    <Route path="/drex" element={<DrexPage />} />
+                    <Route path="*" element={<Navigate to="/" />} />
+                  </Routes>
+                </Layout>
+              )
             ) : (
               <Navigate to="/auth" />
             )
