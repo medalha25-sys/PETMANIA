@@ -58,6 +58,38 @@ const ClientPetModal: React.FC<ClientPetModalProps> = ({ isOpen, onClose, onSucc
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("Usuário não autenticado");
 
+            // Ensure user exists in 'clients' table before creating pet
+            const { data: clientData } = await supabase
+                .from('clients')
+                .select('id')
+                .eq('id', user.id)
+                .single();
+
+            if (!clientData) {
+                // If not in clients, copy from profiles or auth metadata
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('full_name, email')
+                    .eq('id', user.id)
+                    .single();
+
+                const { error: createClientError } = await supabase
+                    .from('clients')
+                    .insert({
+                        id: user.id, // Keep IDs in sync
+                        full_name: profile?.full_name || user.user_metadata.full_name || 'Cliente',
+                        email: profile?.email || user.email,
+                        zip_code: '00000-000', // Default placeholder
+                        address: 'Endereço pendente', // Default placeholder
+                        phone: '' // Default empty
+                    });
+
+                if (createClientError) {
+                    console.error('Error auto-creating client:', createClientError);
+                    // Continue anyway, maybe the trigger handled it or it's a race condition
+                }
+            }
+
             const petData = {
                 name,
                 species,
