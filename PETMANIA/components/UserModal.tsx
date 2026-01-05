@@ -78,7 +78,16 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
 
         } catch (err: any) {
             console.error(err);
-            setError(err.message || 'Erro ao cadastrar usuário.');
+            console.error(err);
+            let errorMessage = 'Erro ao cadastrar usuário.';
+            if (err.message === 'User already registered') {
+                errorMessage = 'Este email já está cadastrado.';
+            } else if (err.message.includes('Password')) {
+                errorMessage = 'A senha deve ter pelo menos 6 caracteres.';
+            } else if (err.message.includes('valid email')) {
+                errorMessage = 'Por favor, insira um email válido.';
+            }
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }

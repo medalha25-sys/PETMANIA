@@ -61,7 +61,16 @@ const Auth: React.FC<AuthProps> = ({ onGuestLogin }) => {
                 }
             }
         } catch (err: any) {
-            setError(err.message || 'Erro na autenticação');
+            console.error(err);
+            let errorMessage = 'Erro na autenticação';
+            if (err.message === 'Invalid login credentials') {
+                errorMessage = 'Email ou senha incorretos.';
+            } else if (err.message.includes('Email not confirmed')) {
+                errorMessage = 'Por favor, confirme seu email antes de entrar.';
+            } else if (err.message.includes('User already registered')) {
+                errorMessage = 'Este email já está registrado. Tente fazer login.';
+            }
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
