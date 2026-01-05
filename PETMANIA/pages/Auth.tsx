@@ -20,6 +20,50 @@ const Auth: React.FC<AuthProps> = ({ onGuestLogin }) => {
     const [isRecovery, setIsRecovery] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [companyName, setCompanyName] = useState('PetMania');
+
+    React.useEffect(() => {
+        const fetchCompanyInfo = async () => {
+            const { data } = await supabase
+                .from('company_info')
+                .select('logo_url, name')
+                .single();
+            if (data) {
+                if (data.logo_url) setLogoUrl(data.logo_url);
+                if (data.name) setCompanyName(data.name);
+            }
+        };
+        fetchCompanyInfo();
+    }, []);
+
+    const handleGoogleLogin = async () => {
+        try {
+            setLoading(true);
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    queryParams: {
+                        access_type: 'offline',
+                        prompt: 'consent',
+                    },
+                    redirectTo: window.location.origin,
+                },
+            });
+            if (error) throw error;
+        } catch (err: any) {
+            console.error("Google Login Error:", err);
+            let msg = 'Erro ao conectar com Google.';
+            if (err.message?.includes('provider is not enabled')) {
+                msg = 'O login com Google não está ativado no sistema (Supabase).';
+            } else if (err.message?.includes('configuration')) {
+                msg = 'Erro de configuração do Google. Verifique o painel.';
+            }
+            setError(msg);
+            setLoading(false);
+        }
+    };
+
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -28,7 +72,7 @@ const Auth: React.FC<AuthProps> = ({ onGuestLogin }) => {
         try {
             if (isRecovery) {
                 const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: window.location.origin + '/update-password', // Ensure this route exists or redirect to home to handle it
+                    redirectTo: window.location.origin + '/update-password',
                 });
                 if (error) throw error;
                 alert('Link de recuperação enviado para o seu e-mail!');
@@ -81,10 +125,16 @@ const Auth: React.FC<AuthProps> = ({ onGuestLogin }) => {
             <div className="w-full max-w-md">
                 <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 border border-gray-100 dark:border-gray-800 transition-all">
                     <div className="flex flex-col items-center mb-8">
-                        <div className="size-16 bg-primary rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-primary/20">
-                            <span className="material-symbols-outlined text-3xl text-slate-900">pets</span>
+                        <div className="size-20 bg-transparent rounded-2xl flex items-center justify-center mb-4 overflow-hidden">
+                            {logoUrl ? (
+                                <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                            ) : (
+                                <div className="size-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20">
+                                    <span className="material-symbols-outlined text-3xl text-slate-900">pets</span>
+                                </div>
+                            )}
                         </div>
-                        <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tight text-center">PetManager Pro</h1>
+                        <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tight text-center">{companyName}</h1>
                         <p className="text-slate-500 dark:text-slate-400 mt-3 text-center text-sm font-medium">
                             {isRecovery
                                 ? 'Recupere sua senha'
@@ -155,19 +205,42 @@ const Auth: React.FC<AuthProps> = ({ onGuestLogin }) => {
                             )}
                         </button>
 
+                        {!isRecovery && !isRegister && (
+                            <>
+                                <div className="relative flex items-center py-2">
+                                    <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+                                    <span className="flex-shrink-0 mx-4 text-xs font-bold text-slate-400 uppercase">ou continue com</span>
+                                    <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={handleGoogleLogin}
+                                    disabled={loading}
+                                    className="w-full py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2"
+                                >
+                                    <img
+                                        src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                                        alt="Google"
+                                        className="w-5 h-5"
+                                    />
+                                    Entrar com Google
+                                </button>
+                            </>
+                        )}
+
                         {!isRecovery && !isRegister && onGuestLogin && (
                             <button
                                 type="button"
                                 onClick={onGuestLogin}
-                                className="w-full py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2"
+                                className="w-full py-3 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
                             >
-                                <span className="material-symbols-outlined text-[20px]">visibility</span>
                                 Entrar como Visitante
                             </button>
                         )}
                     </form>
 
-                    <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center space-y-3">
+                    <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 text-center space-y-1">
                         {!isRecovery && (
                             <button
                                 onClick={() => setIsRegister(!isRegister)}
@@ -188,14 +261,16 @@ const Auth: React.FC<AuthProps> = ({ onGuestLogin }) => {
                             {isRecovery ? 'Voltar para o Login' : 'Esqueceu a senha?'}
                         </button>
                     </div>
-                </div>
 
-                <p className="mt-8 text-center text-[11px] text-slate-500 dark:text-slate-600">
-                    PetManager Pro v2.4.0 • Sistema Seguro
-                </p>
-                <p className="mt-1 text-center text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-                    Desenvolvido por: Wesley Luis De Jesus
-                </p>
+                    <div className="mt-6 pt-4 border-t border-gray-50 dark:border-gray-800/50">
+                        <p className="text-center text-[10px] text-slate-400 dark:text-slate-600">
+                            PetMania v2.4.0 • Sistema Seguro
+                        </p>
+                        <p className="mt-0.5 text-center text-[10px] text-slate-300 dark:text-slate-600 font-medium">
+                            Desenvolvido por: Wesley Luis De Jesus
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     );

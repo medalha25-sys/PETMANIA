@@ -425,7 +425,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ darkMode, setDarkMode }) =>
                                                 onClick={async () => {
                                                     setLoading(true);
                                                     try {
-                                                        if (!companyId) throw new Error('Company ID not found');
+                                                        if (!companyId) throw new Error('ID da empresa não encontrado');
                                                         const { error } = await supabase
                                                             .from('company_info')
                                                             .update({
@@ -693,9 +693,26 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ darkMode, setDarkMode }) =>
                                                         </button>
                                                         {profile.id !== user?.id && (
                                                             <button
-                                                                onClick={() => {
-                                                                    // Delete logic would go here (requires Edge Function usually for auth.users)
-                                                                    alert('Para excluir o usuário, é necessário acesso administrativo ao Auth.');
+                                                                onClick={async () => {
+                                                                    if (confirm(`Tem certeza que deseja excluir o usuário ${profile.full_name}? Essa ação não pode ser desfeita.`)) {
+                                                                        setLoading(true);
+                                                                        try {
+                                                                            const { error } = await supabase.rpc('delete_user_by_admin', {
+                                                                                target_user_id: profile.id
+                                                                            });
+
+                                                                            if (error) throw error;
+
+                                                                            setMessage({ type: 'success', text: 'Usuário excluído com sucesso.' });
+                                                                            // Update local state to remove the deleted user
+                                                                            setProfiles(profiles.filter(p => p.id !== profile.id));
+                                                                        } catch (err: any) {
+                                                                            console.error(err);
+                                                                            setMessage({ type: 'error', text: err.message || 'Erro ao excluir usuário.' });
+                                                                        } finally {
+                                                                            setLoading(false);
+                                                                        }
+                                                                    }
                                                                 }}
                                                                 className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                                                             >
