@@ -86,7 +86,7 @@ const ClientPetModal: React.FC<ClientPetModalProps> = ({ isOpen, onClose, onSucc
 
                 if (createClientError) {
                     console.error('Error auto-creating client:', createClientError);
-                    // Continue anyway, maybe the trigger handled it or it's a race condition
+                    throw new Error(`Erro ao criar registro de cliente: ${createClientError.message}`);
                 }
             }
 
