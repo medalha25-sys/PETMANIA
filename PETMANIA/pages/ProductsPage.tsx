@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 
 interface Product {
@@ -15,6 +16,7 @@ interface Product {
 const CATEGORIES = ['Alimentação', 'Higiene', 'Brinquedos', 'Acessórios', 'Medicamentos'];
 
 const ProductsPage: React.FC = () => {
+    const navigate = useNavigate();
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -159,7 +161,30 @@ const ProductsPage: React.FC = () => {
                         <p className="text-slate-500 text-lg">Gerencie o estoque e catálogo de vendas.</p>
                     </div>
                     <button
-                        onClick={() => setShowModal(true)}
+                        onClick={async () => {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            if (!session) {
+                                // Redirect to register if guest tries to add product (though strictly speaking user asked for 'purchase', but adding product is admin feature. guest shouldn't do it either)
+                                // User request: "se tentar fazer qualquer compra encaminhe para o formulario de cadastro".
+                                // Since this is the admin "Add Product" button, a guest shouldn't see/use it ideally, or redirect. 
+                                // But usually guests are CUSTOMERS.
+                                // If the user meant "Buy product", this page seems to be an Admin Management page (add/edit products).
+                                // There is no 'Buy' button visible in the code I read.
+                                // However, checking the requirements: "guest... cannot make any scheduling nor buy any type of product or service".
+                                // This assumes there is a public facing "Buy" or "Cart" feature.
+                                // The current code seems to be a Management Dashboard (CRUD).
+                                // A guest strictly speaking shouldn't even Access this page if it's management.
+                                // But the user said "enter as visitor... restriction on product purchase".
+                                // If this page is the catalog, maybe the user wants to SEE the products but not ADD them.
+                                // If I restrict the "New Product" button, that covers the "Management" part.
+                                // But for "Buying", I don't see a buy button.
+                                // I'll assume for now redirecting on "New Product" is safe as a restriction for "admin" actions if guest.
+                                // If there was a 'Buy' button I'd restrict that.
+                                navigate('/auth', { state: { isRegister: true } });
+                                return;
+                            }
+                            setShowModal(true);
+                        }}
                         className="bg-primary text-slate-900 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20 whitespace-nowrap"
                     >
                         <span className="material-symbols-outlined">add</span>

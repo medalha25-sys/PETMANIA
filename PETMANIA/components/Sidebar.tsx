@@ -6,9 +6,10 @@ import { supabase } from '../supabase';
 
 interface SidebarProps {
     onOpenCheckout: () => void;
+    isGuest?: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onOpenCheckout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onOpenCheckout, isGuest = false }) => {
     const location = useLocation();
     const [companyName, setCompanyName] = React.useState('PetManager');
     const [companyLogo, setCompanyLogo] = React.useState<string | null>(null);
@@ -38,6 +39,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onOpenCheckout }) => {
         };
     }, []);
 
+    const filteredNavItems = NAV_ITEMS.filter(item => {
+        if (!isGuest) return true; // Show all for logged in users
+        // For guests, show only specific items
+        return ['/', '/agenda', '/produtos', '/servicos'].includes(item.to);
+    });
+
     return (
         <aside className="hidden lg:flex w-72 flex-col border-r border-gray-200 dark:border-gray-800 bg-surface-light dark:bg-surface-dark transition-colors duration-200">
             <div className="flex h-full flex-col justify-between p-4">
@@ -60,14 +67,16 @@ const Sidebar: React.FC<SidebarProps> = ({ onOpenCheckout }) => {
                     </div>
 
                     <nav className="flex flex-col gap-2">
-                        <button
-                            onClick={onOpenCheckout}
-                            className="flex w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl h-12 px-4 bg-primary hover:bg-primary-dark transition-all text-slate-900 text-sm font-bold leading-normal tracking-[0.015em] shadow-sm transform hover:scale-[1.02] mb-2"
-                        >
-                            <span className="material-symbols-outlined text-[20px]">point_of_sale</span>
-                            <span className="truncate">Nova Venda</span>
-                        </button>
-                        {NAV_ITEMS.map((item) => (
+                        {!isGuest && (
+                            <button
+                                onClick={onOpenCheckout}
+                                className="flex w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl h-12 px-4 bg-primary hover:bg-primary-dark transition-all text-slate-900 text-sm font-bold leading-normal tracking-[0.015em] shadow-sm transform hover:scale-[1.02] mb-2"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">point_of_sale</span>
+                                <span className="truncate">Nova Venda</span>
+                            </button>
+                        )}
+                        {filteredNavItems.map((item) => (
                             <NavLink
                                 key={item.to}
                                 to={item.to}

@@ -10,23 +10,25 @@ interface LayoutProps {
   darkMode: boolean;
   setDarkMode: (dark: boolean) => void;
   userEmail?: string;
+  isGuest?: boolean;
+  onLogout?: () => Promise<void>;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, darkMode, setDarkMode, userEmail }) => {
+const Layout: React.FC<LayoutProps> = ({ children, darkMode, setDarkMode, userEmail, isGuest = false, onLogout }) => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark">
       {/* Desktop Sidebar */}
       <div className="print:hidden">
-        <Sidebar onOpenCheckout={() => setIsCheckoutOpen(true)} />
+        <Sidebar onOpenCheckout={() => setIsCheckoutOpen(true)} isGuest={isGuest} />
       </div>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full relative overflow-hidden print:h-auto print:overflow-visible">
         {/* Sticky Header */}
         <div className="print:hidden">
-          <Header darkMode={darkMode} setDarkMode={setDarkMode} userEmail={userEmail} />
+          <Header darkMode={darkMode} setDarkMode={setDarkMode} userEmail={userEmail} onLogout={onLogout} />
         </div>
 
         {/* Page Content Scroll Area */}
@@ -37,7 +39,7 @@ const Layout: React.FC<LayoutProps> = ({ children, darkMode, setDarkMode, userEm
 
         {/* Mobile Navigation Bottom Bar */}
         <div className="print:hidden">
-          <MobileNav />
+          <MobileNav isGuest={isGuest} />
         </div>
       </main>
 

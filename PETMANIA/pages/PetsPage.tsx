@@ -7,8 +7,10 @@ interface Pet {
     name: string;
     species: string;
     breed: string | null;
+    sex: 'Macho' | 'Fêmea' | null;
     avatar_url: string | null;
     birth_date: string | null;
+    weight: number | null;
     owner_id: string | null;
     owner?: {
         full_name: string;
@@ -30,9 +32,13 @@ const PetsPage: React.FC = () => {
     const [showModal, setShowModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
+    const [selectedPets, setSelectedPets] = useState<Set<string>>(new Set());
+    const [lastSelectedPetId, setLastSelectedPetId] = useState<string | null>(null);
+
     // Form State
     const [name, setName] = useState('');
     const [species, setSpecies] = useState('Cachorro');
+    const [sex, setSex] = useState<'Macho' | 'Fêmea'>('Macho');
     const [breed, setBreed] = useState('');
     const [birthDate, setBirthDate] = useState('');
     const [weight, setWeight] = useState('');
@@ -49,6 +55,80 @@ const PetsPage: React.FC = () => {
 
     // Company Info for Print
     const [companyInfo, setCompanyInfo] = useState<{ name: string, logo_url: string | null }>({ name: 'PetManager', logo_url: null });
+
+
+    // Delete State
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<string | 'selected' | null>(null);
+
+    const handleDeletePet = (id: string) => {
+        setDeleteTarget(id);
+        setShowDeleteConfirm(true);
+    };
+
+    const triggerBulkDelete = () => {
+        if (selectedPets.size === 0) return;
+        setDeleteTarget('selected');
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+
+        try {
+            let idsToDelete: string[] = [];
+
+            if (deleteTarget === 'selected') {
+                idsToDelete = Array.from(selectedPets);
+            } else {
+                idsToDelete = [deleteTarget];
+            }
+
+            const { error } = await supabase.from('pets').delete().in('id', idsToDelete);
+
+            if (error) throw error;
+
+            setPets(prev => prev.filter(p => !idsToDelete.includes(p.id)));
+
+            if (deleteTarget === 'selected') {
+                setSelectedPets(new Set());
+            } else if (selectedPets.has(deleteTarget)) {
+                const newSet = new Set(selectedPets);
+                newSet.delete(deleteTarget);
+                setSelectedPets(newSet);
+            }
+
+            setShowDeleteConfirm(false);
+            setDeleteTarget(null);
+
+        } catch (error) {
+            console.error('Error deleting pet(s):', error);
+            alert('Erro ao excluir pet(s). Verifique se há agendamentos vinculados.');
+        }
+    };
+
+    // Keyboard Shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Only trigger if no modal is open (except potentially confirmation modal, but we check that)
+            // And ensure we are not typing in an input
+            if ((e.key === 'Delete' || e.key === 'Backspace') &&
+                !showModal &&
+                !showHistoryModal &&
+                !showDeleteConfirm &&
+                !(e.target instanceof HTMLInputElement) &&
+                !(e.target instanceof HTMLTextAreaElement)
+            ) {
+                if (selectedPets.size > 0) {
+                    e.preventDefault();
+                    triggerBulkDelete();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedPets, showModal, showHistoryModal, showDeleteConfirm]);
 
     const handleOpenHistory = async (pet: Pet) => {
         setSelectedPetHistory(pet);
@@ -220,6 +300,7 @@ const PetsPage: React.FC = () => {
             const petData = {
                 name,
                 species,
+                sex,
                 breed,
                 birth_date: birthDate || null,
                 weight: weight ? parseFloat(weight) : null,
@@ -254,6 +335,7 @@ const PetsPage: React.FC = () => {
     const resetForm = () => {
         setName('');
         setSpecies('Cachorro');
+        setSex('Macho');
         setBreed('');
         setBirthDate('');
         setWeight('');
@@ -269,6 +351,7 @@ const PetsPage: React.FC = () => {
         setEditingPet(pet);
         setName(pet.name);
         setSpecies(pet.species || 'Cachorro');
+        setSex(pet.sex || 'Macho');
         setBreed(pet.breed || '');
         setBirthDate(pet.birth_date || '');
         setWeight(pet.weight ? pet.weight.toString() : '');
@@ -297,6 +380,7 @@ const PetsPage: React.FC = () => {
                         <button onClick={() => navigate('/')} className="hover:text-primary transition-colors">Início</button>
                         <span>/</span>
                         <span className="font-medium text-slate-900 dark:text-white">Pets</span>
+                        {selectedPets.size > 0 && <span className="ml-2 text-xs font-semibold bg-primary/20 text-primary-dark px-2 py-0.5 rounded-full">{selectedPets.size} selecionado(s)</span>}
                     </div>
                     <h1 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">Pets</h1>
                     <p className="text-slate-500 text-base">Gerencie os pets cadastrados no sistema.</p>
@@ -345,7 +429,25 @@ const PetsPage: React.FC = () => {
                                 </tr>
                             ) : (
                                 filteredPets.map((pet) => (
-                                    <tr key={pet.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                                    <tr
+                                        key={pet.id}
+                                        onClick={(e) => {
+                                            if (e.ctrlKey || e.metaKey) {
+                                                const newSelected = new Set(selectedPets);
+                                                if (newSelected.has(pet.id)) {
+                                                    newSelected.delete(pet.id);
+                                                } else {
+                                                    newSelected.add(pet.id);
+                                                }
+                                                setSelectedPets(newSelected);
+                                                setLastSelectedPetId(pet.id);
+                                            }
+                                        }}
+                                        className={`transition-colors group cursor-pointer ${selectedPets.has(pet.id)
+                                            ? 'bg-primary/10 hover:bg-primary/20 dark:bg-primary/5 dark:hover:bg-primary/10 border-l-4 border-l-primary'
+                                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 border-l-4 border-l-transparent'
+                                            }`}
+                                    >
                                         <td className="p-4">
                                             <div className="flex items-center gap-3">
                                                 <div
@@ -364,7 +466,13 @@ const PetsPage: React.FC = () => {
                                         <td className="p-4">
                                             <div className="flex flex-col">
                                                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{pet.species}</span>
-                                                <span className="text-xs text-slate-500">{pet.breed || '-'}</span>
+                                                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                                    <span>{pet.breed || '-'}</span>
+                                                    <span className="text-slate-300 dark:text-slate-600">•</span>
+                                                    <span className={pet.sex === 'Macho' ? 'text-blue-500' : pet.sex === 'Fêmea' ? 'text-pink-500' : ''}>
+                                                        {pet.sex || 'Sexo n/a'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="p-4">
@@ -380,7 +488,7 @@ const PetsPage: React.FC = () => {
                                             {pet.birth_date ? new Date(pet.birth_date).toLocaleDateString('pt-BR') : '-'}
                                         </td>
                                         <td className="p-4 text-right">
-                                            <div className="flex justify-end gap-2">
+                                            <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <button
                                                     onClick={() => handleOpenHistory(pet)}
                                                     className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors rounded-lg"
@@ -471,6 +579,18 @@ const PetsPage: React.FC = () => {
                                         <option value="Gato" className="bg-white dark:bg-zinc-900 text-slate-900 dark:text-white">Gato</option>
                                         <option value="Pássaro" className="bg-white dark:bg-zinc-900 text-slate-900 dark:text-white">Pássaro</option>
                                         <option value="Outro" className="bg-white dark:bg-zinc-900 text-slate-900 dark:text-white">Outro</option>
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Sexo</label>
+                                    <select
+                                        value={sex}
+                                        onChange={(e) => setSex(e.target.value as 'Macho' | 'Fêmea')}
+                                        className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-4 text-sm dark:text-white focus:ring-2 focus:ring-primary/50 outline-none [&>option]:text-slate-900 [&>option]:dark:bg-surface-dark [&>option]:dark:text-white"
+                                    >
+                                        <option value="Macho" className="bg-white dark:bg-zinc-900 text-slate-900 dark:text-white">Macho</option>
+                                        <option value="Fêmea" className="bg-white dark:bg-zinc-900 text-slate-900 dark:text-white">Fêmea</option>
                                     </select>
                                 </div>
 
@@ -576,6 +696,43 @@ const PetsPage: React.FC = () => {
                 </div>
             )
             }
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden p-6 animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-800">
+                        <div className="flex flex-col items-center text-center gap-4">
+                            <div className="size-12 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-2xl">delete</span>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                                    {deleteTarget === 'selected'
+                                        ? `Excluir ${selectedPets.size} pets?`
+                                        : 'Excluir pet?'}
+                                </h3>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    Essa ação não pode ser desfeita. Histórico e agendamentos podem ser perdidos.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 w-full mt-2">
+                                <button
+                                    onClick={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
+                                    className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={confirmDelete}
+                                    className="h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm shadow-lg shadow-red-500/20 transition-all"
+                                >
+                                    Excluir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* History Modal */}
             {showHistoryModal && selectedPetHistory && (

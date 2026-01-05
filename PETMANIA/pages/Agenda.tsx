@@ -60,6 +60,8 @@ const Agenda: React.FC = () => {
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('month'); // Default to month view
   const [expandedDay, setExpandedDay] = useState<string | null>(null); // For double-click detail view
 
+  const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set());
+
   const hours = Array.from({ length: 15 }, (_, i) => i + 7); // 7am to 9pm
 
   // Helper for local date string YYYY-MM-DD
@@ -182,7 +184,7 @@ const Agenda: React.FC = () => {
   };
 
   // Bulk Delete State
-  const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set());
+  // Bulk Delete State
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | 'selected' | null>(null);
 
@@ -195,6 +197,28 @@ const Agenda: React.FC = () => {
     }
     setSelectedApps(newSet);
   };
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') &&
+        !isModalOpen &&
+        !showDeleteConfirm &&
+        !isCheckoutOpen &&
+        !isCalendarOpen &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLTextAreaElement)
+      ) {
+        if (selectedApps.size > 0) {
+          e.preventDefault();
+          triggerBulkDelete();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedApps, isModalOpen, showDeleteConfirm, isCheckoutOpen, isCalendarOpen]);
 
   const handleDeleteAppointment = (id: string) => {
     setDeleteTarget(id);
@@ -330,10 +354,6 @@ const Agenda: React.FC = () => {
       setIsModalOpen(false);
       fetchAppointments();
       // Reset form
-      alert('Agendamento criado com sucesso!');
-      setIsModalOpen(false);
-      fetchAppointments();
-      // Reset form
       setSelectedClient('');
       setSelectedPet('');
       setClientPets([]);
@@ -405,7 +425,14 @@ const Agenda: React.FC = () => {
               <span className="material-symbols-outlined mr-2 text-[18px]">ios_share</span>
               Exportar
             </button>
-            <button onClick={() => setIsModalOpen(true)} className="h-10 px-4 bg-primary hover:bg-primary-dark text-slate-900 text-sm font-bold rounded-xl flex items-center shadow-lg shadow-primary/20 transition-all">
+            <button onClick={async () => {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (!session) {
+                navigate('/auth', { state: { isRegister: true } });
+                return;
+              }
+              setIsModalOpen(true);
+            }} className="h-10 px-4 bg-primary hover:bg-primary-dark text-slate-900 text-sm font-bold rounded-xl flex items-center shadow-lg shadow-primary/20 transition-all">
               <span className="material-symbols-outlined mr-2 text-[20px]">add</span>
               Novo Agendamento
             </button>
@@ -414,74 +441,81 @@ const Agenda: React.FC = () => {
 
         {/* Filters Row */}
         <div className="flex flex-wrap items-center justify-between gap-4 mt-2">
-          <div className="flex items-center bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-1 shadow-sm">
-            <button className="size-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-900 dark:text-white transition-colors">
-              <span className="material-symbols-outlined text-[20px]">chevron_left</span>
-            </button>
-            <span className="px-4 text-sm font-bold text-slate-900 dark:text-white min-w-[140px] text-center">
-              {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-            </span>
-            <button className="size-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-900 dark:text-white transition-colors">
-              <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-            </button>
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 mr-4">
-              <button
-                onClick={() => setViewMode('day')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'day'
-                  ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-              >
-                Dia
+          <div className="flex items-center gap-3">
+            {selectedApps.size > 0 && (
+              <span className="text-xs font-bold bg-primary/20 text-primary-dark px-3 py-1 rounded-full animate-in fade-in">
+                {selectedApps.size} selecionado(s)
+              </span>
+            )}
+            <div className="flex bg-white dark:bg-surface-dark rounded-xl p-1 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <button className="size-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-900 dark:text-white transition-colors">
+                <span className="material-symbols-outlined text-[20px]">chevron_left</span>
               </button>
-              <button
-                onClick={() => setViewMode('week')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'week'
-                  ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-              >
-                Semana
-              </button>
-              <button
-                onClick={() => setViewMode('month')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'month'
-                  ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-              >
-                Mês
+              <span className="px-4 text-sm font-bold text-slate-900 dark:text-white min-w-[140px] text-center">
+                {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+              </span>
+              <button className="size-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-900 dark:text-white transition-colors">
+                <span className="material-symbols-outlined text-[20px]">chevron_right</span>
               </button>
             </div>
 
-            <button
-              onClick={() => setFilter('all')}
-              className={`flex h-8 items-center gap-2 px-3 rounded-lg text-xs font-bold transition-colors ${filter === 'all'
-                ? 'bg-primary text-slate-900 ring-2 ring-primary ring-offset-1 dark:ring-offset-background-dark'
-                : 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary/50'
-                }`}
-            >
-              <span className="material-symbols-outlined text-[16px]">check</span> Todos
-            </button>
-            <button
-              onClick={() => setFilter('bath')}
-              className={`flex h-8 items-center gap-2 px-3 rounded-lg text-xs font-medium transition-colors ${filter === 'bath'
-                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                : 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary/50'
-                }`}
-            >
-              <span className="material-symbols-outlined text-[16px] text-blue-500">shower</span> Banho & Tosa
-            </button>
-            <button
-              onClick={() => setFilter('vet')}
-              className={`flex h-8 items-center gap-2 px-3 rounded-lg text-xs font-medium transition-colors ${filter === 'vet'
-                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
-                : 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary/50'
-                }`}
-            >
-              <span className="material-symbols-outlined text-[16px] text-red-500">stethoscope</span> Veterinário
-            </button>
+            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
+              {/* View Mode Toggle */}
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 mr-4">
+                <button
+                  onClick={() => setViewMode('day')}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'day'
+                    ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  Dia
+                </button>
+                <button
+                  onClick={() => setViewMode('week')}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'week'
+                    ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  Semana
+                </button>
+                <button
+                  onClick={() => setViewMode('month')}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'month'
+                    ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  Mês
+                </button>
+              </div>
+
+              <button
+                onClick={() => setFilter('all')}
+                className={`flex h-8 items-center gap-2 px-3 rounded-lg text-xs font-bold transition-colors ${filter === 'all'
+                  ? 'bg-primary text-slate-900 ring-2 ring-primary ring-offset-1 dark:ring-offset-background-dark'
+                  : 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary/50'
+                  }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">check</span> Todos
+              </button>
+              <button
+                onClick={() => setFilter('bath')}
+                className={`flex h-8 items-center gap-2 px-3 rounded-lg text-xs font-medium transition-colors ${filter === 'bath'
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                  : 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary/50'
+                  }`}
+              >
+                <span className="material-symbols-outlined text-[16px] text-blue-500">shower</span> Banho & Tosa
+              </button>
+              <button
+                onClick={() => setFilter('vet')}
+                className={`flex h-8 items-center gap-2 px-3 rounded-lg text-xs font-medium transition-colors ${filter === 'vet'
+                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                  : 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary/50'
+                  }`}
+              >
+                <span className="material-symbols-outlined text-[16px] text-red-500">stethoscope</span> Veterinário
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -522,7 +556,25 @@ const Agenda: React.FC = () => {
                       return true;
                     })
                     .map(apt => (
-                      <div key={apt.id} className={`group relative flex items-center gap-3 p-3 rounded-xl border shadow-sm cursor-pointer hover:opacity-100 hover:shadow-md transition-all ${getServiceColor(apt.service_type)}`}>
+                      <div
+                        key={apt.id}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Avoid triggering day click
+                          if (e.ctrlKey || e.metaKey) {
+                            const newSelected = new Set(selectedApps);
+                            if (newSelected.has(apt.id)) {
+                              newSelected.delete(apt.id);
+                            } else {
+                              newSelected.add(apt.id);
+                            }
+                            setSelectedApps(newSelected);
+                          }
+                        }}
+                        className={`group relative flex items-center gap-3 p-3 rounded-xl border shadow-sm cursor-pointer hover:opacity-100 hover:shadow-md transition-all ${selectedApps.has(apt.id)
+                          ? 'ring-2 ring-offset-2 ring-primary dark:ring-offset-surface-dark z-20'
+                          : getServiceColor(apt.service_type)
+                          }`}
+                      >
                         <div className="shrink-0 size-9 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
                           {apt.client?.avatar_url ? (
                             <img src={apt.client.avatar_url} alt="Av" className="w-full h-full object-cover" />
@@ -685,7 +737,12 @@ const Agenda: React.FC = () => {
               {/* Footer Actions */}
               <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-surface-dark flex justify-end">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (!session) {
+                      navigate('/auth', { state: { isRegister: true } });
+                      return;
+                    }
                     setDate(expandedDay);
                     setIsModalOpen(true);
                     setExpandedDay(null);

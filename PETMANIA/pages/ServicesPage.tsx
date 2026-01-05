@@ -97,7 +97,14 @@ const ServicesPage: React.FC = () => {
           <p className="text-slate-500 text-base">Gerencie os preços, durações e detalhes técnicos dos serviços oferecidos.</p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+              navigate('/auth', { state: { isRegister: true } });
+              return;
+            }
+            setIsModalOpen(true);
+          }}
           className="flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-primary hover:bg-primary-dark text-slate-900 text-sm font-bold shadow-lg shadow-primary/25 transition-all transform hover:scale-105 active:scale-95"
         >
           <span className="material-symbols-outlined">add</span>

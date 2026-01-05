@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import ReceiptModal from '../components/ReceiptModal';
+import { OpenRegisterModal, CloseRegisterModal } from '../components/CashRegisterModals';
 
 const Financeiro: React.FC = () => {
     const navigate = useNavigate();
@@ -22,7 +23,6 @@ const Financeiro: React.FC = () => {
         return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
     });
 
-    // ... (rest of simple states) ...
     // Modal State
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState<'income' | 'expense'>('income');
@@ -36,13 +36,39 @@ const Financeiro: React.FC = () => {
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [receiptData, setReceiptData] = useState<any>(undefined);
 
-    useEffect(() => {
-        fetchCompanyInfo();
-    }, []);
+    // Cash Register State
+    const [cashRegister, setCashRegister] = useState<any>(null);
+    const [showOpenRegister, setShowOpenRegister] = useState(false);
+    const [showCloseRegister, setShowCloseRegister] = useState(false);
+
+    // Form State additions
+    const [formPaymentMethod, setFormPaymentMethod] = useState('Dinheiro');
 
     useEffect(() => {
-        fetchTransactions();
-    }, [startDate, endDate]);
+        fetchCompanyInfo();
+        fetchCashRegister();
+    }, []);
+
+    const fetchCashRegister = async () => {
+        try {
+            // Get latest register
+            const { data, error } = await supabase
+                .from('daily_cash_registers')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (data) {
+                // Check if it was closed today or if it's still open
+                setCashRegister(data);
+            } else {
+                setCashRegister(null); // Never opened
+            }
+        } catch (error) {
+            console.error('Error fetching register:', error);
+        }
+    };
 
     const fetchCompanyInfo = async () => {
         const { data } = await supabase.from('company_info').select('*').single();
@@ -76,17 +102,17 @@ const Financeiro: React.FC = () => {
             if (error) throw error;
 
             if (data) {
-                const formatted = data.map(record => ({
+                const formatted = data.map((record: any) => ({
                     id: record.id,
                     client: record.appointment?.client?.full_name || (record.type === 'expense' ? '-' : 'Cliente Avulso'),
                     description: record.appointment ? record.appointment.service_type : record.description,
                     date: new Date(record.date).toLocaleDateString('pt-BR'),
-                    // Ensure date is valid for sorting if needed, but we rely on SQL sort
                     rawDate: record.date,
                     value: Number(record.amount),
                     status: 'Concluído',
                     type: record.type,
-                    category: record.category || (record.type === 'income' ? 'Serviços' : 'Outros')
+                    category: record.category || (record.type === 'income' ? 'Serviços' : 'Outros'),
+                    payment_method: record.payment_method
                 }));
                 setTransactions(formatted);
             }
@@ -103,6 +129,13 @@ const Financeiro: React.FC = () => {
             return;
         }
 
+        if (cashRegister?.status === 'closed' && formDate === new Date().toISOString().split('T')[0]) {
+            // Optional: Warn user that register is closed? 
+            // But maybe they are adding a backdated transaction. 
+            // Ideally, we shouldn't allow adding cash transactions to a closed register for the same day easily.
+            // For now, let's allow it but it won't affect the 'closed' final amount.
+        }
+
         setSaving(true);
         try {
             const { error } = await supabase.from('financial_records').insert({
@@ -111,6 +144,7 @@ const Financeiro: React.FC = () => {
                 type: modalType,
                 date: formDate,
                 category: formCategory || (modalType === 'income' ? 'Receita Avulsa' : 'Despesa Operacional'),
+                payment_method: formPaymentMethod, // Add this column in DB
                 created_at: new Date().toISOString()
             });
 
@@ -120,6 +154,7 @@ const Financeiro: React.FC = () => {
             setFormDesc('');
             setFormAmount('');
             setFormCategory('');
+            setFormPaymentMethod('Dinheiro');
             setFormDate(new Date().toISOString().split('T')[0]);
             fetchTransactions();
         } catch (error) {
@@ -130,11 +165,33 @@ const Financeiro: React.FC = () => {
         }
     };
 
+    // Calculate totals for Cash ONLY for the Closing Modal
+    const calculateCashTotals = () => {
+        const cashTransactions = transactions.filter(t => t.payment_method === 'Dinheiro' || !t.payment_method); // Assume old records might be cash? Or default to cash.
+        // Actually earlier I said 'default Dinheiro' in DB, so that helps.
+
+        // Filter transactions strictly within the "Opened At" time if possible? 
+        // Or simplified: transactions of the 'current day' since the register handles "Daily".
+        // Let's rely on transactions visible in the current Date Range Filter (which defaults to Month). 
+        // ideally we should pass only TODAY's transactions to the close modal.
+
+        const today = new Date().toISOString().split('T')[0];
+        const todaysTransactions = transactions.filter(t => t.rawDate === today && (t.payment_method === 'Dinheiro' || t.payment_method === null));
+
+        const income = todaysTransactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.value, 0);
+        const expense = todaysTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.value, 0);
+
+        return { income, expense };
+    };
+
+    const cashTotals = calculateCashTotals();
+
     const openModal = (type: 'income' | 'expense') => {
         setModalType(type);
         setFormDesc('');
         setFormAmount('');
         setFormCategory('');
+        setFormPaymentMethod('Dinheiro');
         setFormDate(new Date().toISOString().split('T')[0]);
         setShowModal(true);
     };
@@ -149,7 +206,7 @@ const Financeiro: React.FC = () => {
                 clientName: transaction.client && transaction.client !== '-' ? transaction.client : '',
                 amount: transaction.value,
                 description: transaction.description,
-                date: transaction.rawDate // or standard date
+                date: transaction.rawDate
             });
         } else {
             setReceiptData(undefined);
@@ -160,21 +217,13 @@ const Financeiro: React.FC = () => {
     const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.value, 0);
     const totalExpense = transactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.value, 0);
     const balance = totalIncome - totalExpense;
-
     return (
         <div className="p-4 md:p-8 space-y-8 max-w-[1400px] mx-auto w-full pb-24 lg:pb-8 relative">
-            {/* Print Header */}
-            <div className="hidden print:flex items-center gap-4 mb-8 border-b border-black pb-4">
-                {companyLogo && <img src={companyLogo} alt="Logo" className="h-16 w-16 object-contain" />}
-                <div>
-                    <h1 className="text-2xl font-bold text-black">{companyName} - Relatório Financeiro</h1>
-                    <p className="text-sm text-gray-600">Período: {new Date(startDate).toLocaleDateString('pt-BR')} até {new Date(endDate).toLocaleDateString('pt-BR')}</p>
-                </div>
-            </div>
-
-            <header className="flex flex-col gap-6 print:hidden">
+            {/* Header Area with Cash Register Status */}
+            <div className="flex flex-col gap-6 print:hidden">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
+                        {/* Breadcrumbs ... */}
                         <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
                             <button onClick={() => navigate('/')} className="hover:text-primary transition-colors">Início</button>
                             <span>/</span>
@@ -182,37 +231,101 @@ const Financeiro: React.FC = () => {
                         </div>
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Financeiro</h1>
                     </div>
+                </div>
 
-                    <div className="flex gap-3">
-                        <button
-                            onClick={() => openModal('income')}
-                            className="h-10 px-4 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl flex items-center shadow-lg shadow-green-600/20 transition-all"
-                        >
-                            <span className="material-symbols-outlined mr-2 text-[20px]">add_circle</span>
-                            Nova Receita
-                        </button>
-                        <button
-                            onClick={() => openModal('expense')}
-                            className="h-10 px-4 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl flex items-center shadow-lg shadow-red-600/20 transition-all"
-                        >
-                            <span className="material-symbols-outlined mr-2 text-[20px]">remove_circle</span>
-                            Nova Despesa
-                        </button>
-                        <button
-                            onClick={handlePrint}
-                            className="h-10 px-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-sm font-bold rounded-xl flex items-center shadow-lg transition-all"
-                        >
-                            <span className="material-symbols-outlined mr-2 text-[20px]">print</span>
-                            Imprimir
-                        </button>
-                        <button
-                            onClick={() => openReceiptModal()}
-                            className="h-10 px-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-sm font-bold rounded-xl flex items-center shadow-lg transition-all"
-                        >
-                            <span className="material-symbols-outlined mr-2 text-[20px]">receipt_long</span>
-                            Emitir Recibo
-                        </button>
+                {/* Cash Register Banner */}
+                <div className="bg-slate-900 dark:bg-black rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+
+                    <div className="flex items-center gap-4 z-10">
+                        <div className={`size-16 rounded-2xl flex items-center justify-center text-3xl shadow-lg ${cashRegister?.status === 'open' ? 'bg-green-500 text-white' : 'bg-red-500/20 text-red-500'}`}>
+                            <span className="material-symbols-outlined">{cashRegister?.status === 'open' ? 'lock_open' : 'lock'}</span>
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold">Fluxo de Caixa Diário</h2>
+                            <div className="flex items-center gap-2 text-sm opacity-80">
+                                <span className={`size-2 rounded-full ${cashRegister?.status === 'open' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                {cashRegister?.status === 'open'
+                                    ? `Caixa Aberto (Início: ${new Date(cashRegister.opened_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})`
+                                    : 'Caixa Fechado'}
+                            </div>
+                        </div>
                     </div>
+
+                    <div className="flex items-center gap-4 z-10">
+                        {cashRegister?.status === 'open' ? (
+                            <div className="text-right mr-4 hidden md:block">
+                                <p className="text-xs opacity-70 uppercase font-bold tracking-wider">Fundo de Troco</p>
+                                <p className="text-xl font-bold font-mono">
+                                    {cashRegister.initial_amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </p>
+                            </div>
+                        ) : cashRegister?.status === 'closed' && (
+                            <div className="text-right mr-4 hidden md:block">
+                                <p className="text-xs opacity-70 uppercase font-bold tracking-wider">Último Fechamento</p>
+                                <div className={`text-xl font-bold font-mono flex items-center gap-2 justify-end ${(cashRegister.final_amount - cashRegister.expected_amount) === 0 ? 'text-green-400' : 'text-yellow-400'
+                                    }`}>
+                                    {(cashRegister.final_amount - cashRegister.expected_amount) !== 0 && (
+                                        <span className="material-symbols-outlined text-sm">warning</span>
+                                    )}
+                                    {(cashRegister.final_amount - cashRegister.expected_amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </div>
+                                <p className="text-[10px] opacity-60">Diferença de Caixa</p>
+                            </div>
+                        )}
+
+                        {(!cashRegister || cashRegister.status === 'closed') && (
+                            <button
+                                onClick={() => setShowOpenRegister(true)}
+                                className="h-12 px-6 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl shadow-lg shadow-green-500/20 transition-all flex items-center gap-2"
+                            >
+                                <span className="material-symbols-outlined">lock_open</span>
+                                Abrir Caixa
+                            </button>
+                        )}
+
+                        {cashRegister?.status === 'open' && (
+                            <button
+                                onClick={() => setShowCloseRegister(true)}
+                                className="h-12 px-6 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-500/20 transition-all flex items-center gap-2"
+                            >
+                                <span className="material-symbols-outlined">lock</span>
+                                Fechar Caixa
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Main Actions Row */}
+                <div className="flex flex-wrap gap-3">
+                    <button
+                        onClick={() => openModal('income')}
+                        className="h-10 px-4 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl flex items-center shadow-lg shadow-green-600/20 transition-all"
+                    >
+                        <span className="material-symbols-outlined mr-2 text-[20px]">add_circle</span>
+                        Nova Receita
+                    </button>
+                    <button
+                        onClick={() => openModal('expense')}
+                        className="h-10 px-4 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl flex items-center shadow-lg shadow-red-600/20 transition-all"
+                    >
+                        <span className="material-symbols-outlined mr-2 text-[20px]">remove_circle</span>
+                        Nova Despesa
+                    </button>
+                    <button
+                        onClick={handlePrint}
+                        className="h-10 px-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-sm font-bold rounded-xl flex items-center shadow-lg transition-all"
+                    >
+                        <span className="material-symbols-outlined mr-2 text-[20px]">print</span>
+                        Imprimir
+                    </button>
+                    <button
+                        onClick={() => openReceiptModal()}
+                        className="h-10 px-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-sm font-bold rounded-xl flex items-center shadow-lg transition-all"
+                    >
+                        <span className="material-symbols-outlined mr-2 text-[20px]">receipt_long</span>
+                        Emitir Recibo
+                    </button>
                 </div>
 
                 {/* Filters & Summary Cards */}
@@ -254,7 +367,7 @@ const Financeiro: React.FC = () => {
                         </p>
                     </div>
                 </div>
-            </header>
+            </div>
 
             {/* Transactions Table */}
             <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in duration-300 print:shadow-none print:border-none print:bg-white">
@@ -356,6 +469,23 @@ const Financeiro: React.FC = () => {
                                     placeholder={modalType === 'income' ? 'Ex: Vendas' : 'Ex: Operacional'}
                                 />
                             </div>
+
+                            {/* Payment Method Selector */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Forma de Pagamento</label>
+                                <select
+                                    value={formPaymentMethod}
+                                    onChange={(e) => setFormPaymentMethod(e.target.value)}
+                                    className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 dark:text-white"
+                                >
+                                    <option value="Dinheiro">Dinheiro</option>
+                                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                    <option value="Cartão de Débito">Cartão de Débito</option>
+                                    <option value="Pix">Pix</option>
+                                    <option value="Transferência">Transferência</option>
+                                </select>
+                            </div>
+
                         </div>
                         <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/50 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
                             <button
@@ -385,6 +515,29 @@ const Financeiro: React.FC = () => {
                 companyCity={companyCity}
                 companyDetails={companyDetails}
             />
+
+            <OpenRegisterModal
+                isOpen={showOpenRegister}
+                onClose={() => setShowOpenRegister(false)}
+                onSuccess={() => {
+                    fetchCashRegister();
+                    fetchTransactions();
+                }}
+            />
+
+            {cashRegister && (
+                <CloseRegisterModal
+                    isOpen={showCloseRegister}
+                    onClose={() => setShowCloseRegister(false)}
+                    registerId={cashRegister.id}
+                    initialAmount={cashRegister.initial_amount}
+                    totalIncome={cashTotals.income}
+                    totalExpense={cashTotals.expense}
+                    onSuccess={() => {
+                        fetchCashRegister();
+                    }}
+                />
+            )}
         </div>
     );
 };

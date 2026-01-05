@@ -3,7 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { SERVICES } from '../constants';
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  isGuest?: boolean;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ isGuest = false }) => {
   const navigate = useNavigate();
   const [showRevenue, setShowRevenue] = useState(true);
 
@@ -40,11 +44,13 @@ const Dashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchAppointments();
-    fetchNotices();
-    fetchNotes();
-    fetchDailyStats();
-  }, []);
+    if (!isGuest) {
+      fetchAppointments();
+      fetchNotices();
+      fetchNotes();
+      fetchDailyStats();
+    }
+  }, [isGuest]);
 
   const fetchDailyStats = async () => {
     const today = new Date().toISOString().split('T')[0];
@@ -289,60 +295,62 @@ const Dashboard: React.FC = () => {
         </div>
       </header>
 
-      {/* Stats Grid */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { icon: 'calendar_today', label: 'Agendamentos Hoje', value: todayCount.toString(), trend: 'Hoje', color: 'blue' },
-          { icon: 'person_add', label: 'Novos Clientes', value: '4', trend: 'Semana', color: 'purple' },
-          { icon: 'payments', label: 'Faturamento Dia', value: dailyRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), trend: 'Hoje', color: 'green' },
-          { icon: 'pets', label: 'Animais na Loja', value: '8', trend: '75% lotação', color: 'orange' },
-        ].map((stat, idx) => (
-          <div
-            key={idx}
-            className={`flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow relative group`}
-          >
-            <div className="flex justify-between items-start">
-              <div
-                onClick={(e) => {
-                  if (stat.label === 'Novos Clientes') {
-                    e.stopPropagation();
-                    navigate('/clientes');
-                  }
-                  if (stat.label === 'Agendamentos Hoje') {
-                    e.stopPropagation();
-                    navigate('/agenda');
-                  }
-                  if (stat.label === 'Faturamento Dia') {
-                    e.stopPropagation();
-                    navigate('/financeiro');
-                  }
-                  if (stat.label === 'Animais na Loja') {
-                    e.stopPropagation();
-                    navigate('/pets');
-                  }
-                }}
-                className={`p-2 rounded-lg bg-${stat.color}-50 dark:bg-${stat.color}-900/20 text-${stat.color}-600 dark:text-${stat.color}-400 ${['Novos Clientes', 'Agendamentos Hoje', 'Faturamento Dia', 'Animais na Loja'].includes(stat.label) ? 'cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-primary transition-all' : ''}`}
-              >
-                <span className="material-symbols-outlined">{stat.icon}</span>
+      {/* Stats Grid - Hide Revenue for Guest */}
+      {!isGuest && (
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { icon: 'calendar_today', label: 'Agendamentos Hoje', value: todayCount.toString(), trend: 'Hoje', color: 'blue' },
+            { icon: 'person_add', label: 'Novos Clientes', value: '4', trend: 'Semana', color: 'purple' },
+            { icon: 'payments', label: 'Faturamento Dia', value: dailyRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), trend: 'Hoje', color: 'green' },
+            { icon: 'pets', label: 'Animais na Loja', value: '8', trend: '75% lotação', color: 'orange' },
+          ].map((stat, idx) => (
+            <div
+              key={idx}
+              className={`flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow relative group`}
+            >
+              <div className="flex justify-between items-start">
+                <div
+                  onClick={(e) => {
+                    if (stat.label === 'Novos Clientes') {
+                      e.stopPropagation();
+                      navigate('/clientes');
+                    }
+                    if (stat.label === 'Agendamentos Hoje') {
+                      e.stopPropagation();
+                      navigate('/agenda');
+                    }
+                    if (stat.label === 'Faturamento Dia') {
+                      e.stopPropagation();
+                      navigate('/financeiro');
+                    }
+                    if (stat.label === 'Animais na Loja') {
+                      e.stopPropagation();
+                      navigate('/pets');
+                    }
+                  }}
+                  className={`p-2 rounded-lg bg-${stat.color}-50 dark:bg-${stat.color}-900/20 text-${stat.color}-600 dark:text-${stat.color}-400 ${['Novos Clientes', 'Agendamentos Hoje', 'Faturamento Dia', 'Animais na Loja'].includes(stat.label) ? 'cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-primary transition-all' : ''}`}
+                >
+                  <span className="material-symbols-outlined">{stat.icon}</span>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{stat.label}</p>
+                  {stat.label === 'Faturamento Dia' && (
+                    <button onClick={() => setShowRevenue(!showRevenue)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                      <span className="material-symbols-outlined text-[16px]">{showRevenue ? 'visibility' : 'visibility_off'}</span>
+                    </button>
+                  )}
+                </div>
+                <h3 className="text-slate-900 dark:text-white text-2xl font-bold mt-1">
+                  {stat.label === 'Faturamento Dia' && !showRevenue ? '••••••' : stat.value}
+                </h3>
               </div>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{stat.label}</p>
-                {stat.label === 'Faturamento Dia' && (
-                  <button onClick={() => setShowRevenue(!showRevenue)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
-                    <span className="material-symbols-outlined text-[16px]">{showRevenue ? 'visibility' : 'visibility_off'}</span>
-                  </button>
-                )}
-              </div>
-              <h3 className="text-slate-900 dark:text-white text-2xl font-bold mt-1">
-                {stat.label === 'Faturamento Dia' && !showRevenue ? '••••••' : stat.value}
-              </h3>
-            </div>
-          </div>
-        ))
-        }
-      </section >
+          ))
+          }
+        </section >
+      )}
 
       {/* Main Content Area */}
       < div className="grid grid-cols-1 xl:grid-cols-3 gap-8" >
@@ -361,7 +369,7 @@ const Dashboard: React.FC = () => {
                     <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Pet</th>
                     <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Serviço</th>
                     <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Status</th>
-                    <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300 text-right">Ações</th>
+                    {!isGuest && <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300 text-right">Ações</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -468,177 +476,178 @@ const Dashboard: React.FC = () => {
         </section >
 
         {/* Sidebar Cards */}
-        <aside className="space-y-6">
-          {/* Notifications Card */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between px-1">
-              <h3 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">Avisos Recentes</h3>
-              <button
-                onClick={fetchNotices}
-                className="text-sm text-primary-dark font-medium hover:underline"
-                title="Atualizar avisos"
-              >
-                Atualizar
-              </button>
-            </div>
-            <div className="rounded-xl p-6 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 shadow-sm">
-              <div className="flex flex-col gap-6 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
-                {/* Expiration Section */}
-                {notices.filter(n => n.type === 'expiration').length > 0 && (
-                  <div className="flex flex-col gap-3">
-                    <div className="sticky top-0 z-10 bg-red-50 dark:bg-red-900/20 px-3 py-2 -mx-3 border-y border-red-100 dark:border-red-900/30 backdrop-blur-sm">
-                      <h4 className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider flex items-center gap-2">
-                        <span className="material-symbols-outlined text-sm">warning</span>
-                        Vencimentos
-                      </h4>
-                    </div>
-                    {notices.filter(n => n.type === 'expiration').map((notice) => (
-                      <div key={notice.id} className="flex gap-3 items-start px-2">
-                        <div className={`shrink-0 size-10 rounded-full flex items-center justify-center ${notice.priority === 'critical' ? 'bg-red-100 dark:bg-red-900/40 text-red-600' :
-                          notice.priority === 'high' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-600' :
-                            'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-600'
-                          }`}>
-                          <span className="material-symbols-outlined text-[20px]">event_busy</span>
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-sm font-bold ${notice.priority === 'critical' ? 'text-red-600 dark:text-red-400' :
-                            'text-slate-900 dark:text-white'
-                            }`}>{notice.title}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{notice.description}</p>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${notice.priority === 'critical' ? 'bg-red-50 text-red-600 border border-red-100' :
-                          notice.priority === 'high' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
-                            'bg-slate-50 text-slate-500 border border-slate-100'
-                          }`}>{notice.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Stock Section */}
-                {notices.filter(n => n.type === 'inventory').length > 0 && (
-                  <div className="flex flex-col gap-3">
-                    <div className="sticky top-0 z-10 bg-yellow-50 dark:bg-yellow-900/20 px-3 py-2 -mx-3 border-y border-yellow-100 dark:border-yellow-900/30 backdrop-blur-sm">
-                      <h4 className="text-xs font-bold text-yellow-700 dark:text-yellow-400 uppercase tracking-wider flex items-center gap-2">
-                        <span className="material-symbols-outlined text-sm">inventory_2</span>
-                        Estoque Baixo
-                      </h4>
-                    </div>
-                    {notices.filter(n => n.type === 'inventory').map((notice) => (
-                      <div key={notice.id} className="flex gap-3 items-start px-2">
-                        <div className="shrink-0 size-10 rounded-full flex items-center justify-center bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600">
-                          <span className="material-symbols-outlined text-[20px]">inventory_2</span>
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-bold text-slate-900 dark:text-white">{notice.title}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{notice.description}</p>
-                        </div>
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-50 text-slate-500 border border-slate-100">
-                          {notice.time}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {notices.length === 0 && (
-                  <div className="text-center py-8 text-slate-400">
-                    <span className="material-symbols-outlined text-3xl mb-2">check_circle</span>
-                    <p className="text-sm">Tudo certo por aqui!</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* User Notes Section */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between px-1">
-              <h3 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">Minhas Anotações</h3>
-            </div>
-            <div className="rounded-xl p-6 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 shadow-sm">
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  placeholder="Adicionar nova anotação..."
-                  value={newNoteContent}
-                  onChange={(e) => setNewNoteContent(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
-                  className="flex-1 h-10 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-slate-900 dark:text-white placeholder:text-slate-400"
-                />
+        {!isGuest && (
+          <aside className="space-y-6">
+            {/* Notifications Card */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">Avisos Recentes</h3>
                 <button
-                  onClick={handleAddNote}
-                  className="h-10 px-4 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
+                  onClick={fetchNotices}
+                  className="text-sm text-primary-dark font-medium hover:underline"
+                  title="Atualizar avisos"
                 >
-                  Adicionar
+                  Atualizar
                 </button>
               </div>
+              <div className="rounded-xl p-6 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 shadow-sm">
+                <div className="flex flex-col gap-6 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
+                  {/* Expiration Section */}
+                  {notices.filter(n => n.type === 'expiration').length > 0 && (
+                    <div className="flex flex-col gap-3">
+                      <div className="sticky top-0 z-10 bg-red-50 dark:bg-red-900/20 px-3 py-2 -mx-3 border-y border-red-100 dark:border-red-900/30 backdrop-blur-sm">
+                        <h4 className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider flex items-center gap-2">
+                          <span className="material-symbols-outlined text-sm">warning</span>
+                          Vencimentos
+                        </h4>
+                      </div>
+                      {notices.filter(n => n.type === 'expiration').map((notice) => (
+                        <div key={notice.id} className="flex gap-3 items-start px-2">
+                          <div className={`shrink-0 size-10 rounded-full flex items-center justify-center ${notice.priority === 'critical' ? 'bg-red-100 dark:bg-red-900/40 text-red-600' :
+                            notice.priority === 'high' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-600' :
+                              'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-600'
+                            }`}>
+                            <span className="material-symbols-outlined text-[20px]">event_busy</span>
+                          </div>
+                          <div className="flex-1">
+                            <p className={`text-sm font-bold ${notice.priority === 'critical' ? 'text-red-600 dark:text-red-400' :
+                              'text-slate-900 dark:text-white'
+                              }`}>{notice.title}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{notice.description}</p>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${notice.priority === 'critical' ? 'bg-red-50 text-red-600 border border-red-100' :
+                            notice.priority === 'high' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
+                              'bg-slate-50 text-slate-500 border border-slate-100'
+                            }`}>{notice.time}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-              <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1 scrollbar-hide">
-                {notes.length === 0 ? (
-                  <p className="text-center text-xs text-slate-400 py-4">Nenhuma anotação ainda.</p>
-                ) : (
-                  notes.map((note) => (
-                    <div
-                      key={note.id}
-                      onDoubleClick={() => setExpandedNoteId(expandedNoteId === note.id ? null : note.id)}
-                      className={`group flex items-start justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-900/30 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700 cursor-pointer select-none`}
-                      title="Clique duas vezes para expandir/colapsar"
-                    >
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                  {/* Stock Section */}
+                  {notices.filter(n => n.type === 'inventory').length > 0 && (
+                    <div className="flex flex-col gap-3">
+                      <div className="sticky top-0 z-10 bg-yellow-50 dark:bg-yellow-900/20 px-3 py-2 -mx-3 border-y border-yellow-100 dark:border-yellow-900/30 backdrop-blur-sm">
+                        <h4 className="text-xs font-bold text-yellow-700 dark:text-yellow-400 uppercase tracking-wider flex items-center gap-2">
+                          <span className="material-symbols-outlined text-sm">inventory_2</span>
+                          Estoque Baixo
+                        </h4>
+                      </div>
+                      {notices.filter(n => n.type === 'inventory').map((notice) => (
+                        <div key={notice.id} className="flex gap-3 items-start px-2">
+                          <div className="shrink-0 size-10 rounded-full flex items-center justify-center bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600">
+                            <span className="material-symbols-outlined text-[20px]">inventory_2</span>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white">{notice.title}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{notice.description}</p>
+                          </div>
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-50 text-slate-500 border border-slate-100">
+                            {notice.time}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {notices.length === 0 && (
+                    <div className="text-center py-8 text-slate-400">
+                      <span className="material-symbols-outlined text-3xl mb-2">check_circle</span>
+                      <p className="text-sm">Tudo certo por aqui!</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* User Notes Section */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">Minhas Anotações</h3>
+              </div>
+              <div className="rounded-xl p-6 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 shadow-sm">
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    placeholder="Adicionar nova anotação..."
+                    value={newNoteContent}
+                    onChange={(e) => setNewNoteContent(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
+                    className="flex-1 h-10 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-slate-900 dark:text-white placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={handleAddNote}
+                    className="h-10 px-4 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
+                  >
+                    Adicionar
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1 scrollbar-hide">
+                  {notes.length === 0 ? (
+                    <p className="text-center text-xs text-slate-400 py-4">Nenhuma anotação ainda.</p>
+                  ) : (
+                    notes.map((note) => (
+                      <div
+                        key={note.id}
+                        onDoubleClick={() => setExpandedNoteId(expandedNoteId === note.id ? null : note.id)}
+                        className={`group flex items-start justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-900/30 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700 cursor-pointer select-none`}
+                        title="Clique duas vezes para expandir/colapsar"
+                      >
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleNote(note.id, note.is_completed);
+                            }}
+                            className={`shrink-0 size-5 rounded border flex items-center justify-center transition-colors mt-0.5 ${note.is_completed
+                              ? 'bg-green-500 border-green-500 text-white'
+                              : 'border-gray-300 dark:border-gray-600 hover:border-primary text-transparent'
+                              }`}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">check</span>
+                          </button>
+                          <span className={`text-sm transition-all duration-200 ${note.is_completed
+                            ? 'text-slate-400 line-through decoration-slate-400'
+                            : 'text-slate-700 dark:text-slate-300'
+                            } ${expandedNoteId === note.id ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>
+                            {note.content}
+                          </span>
+                        </div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleToggleNote(note.id, note.is_completed);
+                            handleDeleteNote(note.id);
                           }}
-                          className={`shrink-0 size-5 rounded border flex items-center justify-center transition-colors mt-0.5 ${note.is_completed
-                            ? 'bg-green-500 border-green-500 text-white'
-                            : 'border-gray-300 dark:border-gray-600 hover:border-primary text-transparent'
-                            }`}
+                          className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-all self-start"
+                          title="Excluir"
                         >
-                          <span className="material-symbols-outlined text-[16px]">check</span>
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
                         </button>
-                        <span className={`text-sm transition-all duration-200 ${note.is_completed
-                          ? 'text-slate-400 line-through decoration-slate-400'
-                          : 'text-slate-700 dark:text-slate-300'
-                          } ${expandedNoteId === note.id ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>
-                          {note.content}
-                        </span>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteNote(note.id);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-all self-start"
-                        title="Excluir"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">delete</span>
-                      </button>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Marketing Card */}
-          <div className="relative overflow-hidden rounded-xl p-6 bg-gradient-to-br from-green-600 to-green-800 text-white shadow-md">
-            <div className="relative z-10 flex flex-col items-start gap-4 h-full justify-center">
-              <div>
-                <h3 className="text-xl font-bold mb-1">Campanha de Vacinação</h3>
-                <p className="text-green-100 text-sm">Envie lembretes para 45 clientes com vacinas pendentes este mês.</p>
+            {/* Marketing Card */}
+            <div className="relative overflow-hidden rounded-xl p-6 bg-gradient-to-br from-green-600 to-green-800 text-white shadow-md">
+              <div className="relative z-10 flex flex-col items-start gap-4 h-full justify-center">
+                <div>
+                  <h3 className="text-xl font-bold mb-1">Campanha de Vacinação</h3>
+                  <p className="text-green-100 text-sm">Envie lembretes para 45 clientes com vacinas pendentes este mês.</p>
+                </div>
+                <button className="px-4 py-2 bg-white text-green-700 rounded-lg text-sm font-bold shadow hover:bg-gray-100 transition-colors">
+                  Iniciar Campanha
+                </button>
               </div>
-              <button className="px-4 py-2 bg-white text-green-700 rounded-lg text-sm font-bold shadow hover:bg-gray-100 transition-colors">
-                Iniciar Campanha
-              </button>
+              <div className="absolute right-[-20px] bottom-[-20px] opacity-20 pointer-events-none">
+                <span className="material-symbols-outlined text-[150px]">pets</span>
+              </div>
             </div>
-            <div className="absolute right-[-20px] bottom-[-20px] opacity-20 pointer-events-none">
-              <span className="material-symbols-outlined text-[150px]">pets</span>
-            </div>
-          </div>
-        </aside>
-      </div>
+          </aside>
+        )}</div>
     </div>
   );
 };

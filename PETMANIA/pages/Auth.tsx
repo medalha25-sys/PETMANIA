@@ -1,15 +1,24 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
-const Auth: React.FC = () => {
+interface AuthProps {
+    onGuestLogin?: () => void;
+}
+
+const Auth: React.FC<AuthProps> = ({ onGuestLogin }) => {
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    // Check if we were redirected with a request to register
+    const initialIsRegister = location.state?.isRegister || false;
+
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isRegister, setIsRegister] = useState(false);
+    const [isRegister, setIsRegister] = useState(initialIsRegister);
     const [isRecovery, setIsRecovery] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const navigate = useNavigate();
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -136,6 +145,17 @@ const Auth: React.FC = () => {
                                 </>
                             )}
                         </button>
+
+                        {!isRecovery && !isRegister && onGuestLogin && (
+                            <button
+                                type="button"
+                                onClick={onGuestLogin}
+                                className="w-full py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">visibility</span>
+                                Entrar como Visitante
+                            </button>
+                        )}
                     </form>
 
                     <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center space-y-3">

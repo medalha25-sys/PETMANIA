@@ -17,6 +17,7 @@ import ProductsPage from './pages/ProductsPage';
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isGuest, setIsGuest] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('theme') === 'dark' ||
@@ -50,6 +51,13 @@ const App: React.FC = () => {
     }
   }, [darkMode]);
 
+  const handleLogout = async () => {
+    if (isGuest) {
+      setIsGuest(false);
+    }
+    await supabase.auth.signOut();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
@@ -64,19 +72,21 @@ const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/auth" element={!session ? <Auth /> : <Navigate to="/" />} />
+        <Route path="/auth" element={!session && !isGuest ? <Auth onGuestLogin={() => setIsGuest(true)} /> : <Navigate to="/" />} />
 
         <Route
           path="/*"
           element={
-            session ? (
+            session || isGuest ? (
               <Layout
                 darkMode={darkMode}
                 setDarkMode={setDarkMode}
-                userEmail={session.user.email}
+                userEmail={session?.user.email || 'Visitante'}
+                isGuest={isGuest}
+                onLogout={handleLogout}
               >
                 <Routes>
-                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/" element={<Dashboard isGuest={isGuest} />} />
                   <Route path="/clientes" element={<Clients />} />
                   <Route path="/pets" element={<PetsPage />} />
                   <Route path="/produtos" element={<ProductsPage />} />

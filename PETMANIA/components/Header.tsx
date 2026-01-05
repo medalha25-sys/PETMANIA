@@ -5,9 +5,10 @@ interface HeaderProps {
     darkMode: boolean;
     setDarkMode: (dark: boolean) => void;
     userEmail?: string;
+    onLogout?: () => Promise<void>;
 }
 
-const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail }) => {
+const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail, onLogout }) => {
     const [loading, setLoading] = useState(false);
     const [userName, setUserName] = useState<string>('Admin');
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -18,6 +19,10 @@ const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail }) => 
             if (user?.user_metadata) {
                 setUserName(user.user_metadata.full_name || 'Admin');
                 setAvatarUrl(user.user_metadata.avatar_url || null);
+            } else {
+                // Reset for guest or no session
+                setUserName(userEmail === 'Visitante' ? 'Visitante' : 'Admin');
+                setAvatarUrl(null);
             }
         };
 
@@ -34,7 +39,7 @@ const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail }) => 
         return () => {
             subscription.unsubscribe();
         };
-    }, []);
+    }, [userEmail]); // Re-run if userEmail changes (e.g. to 'Visitante')
 
     const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         try {
@@ -72,7 +77,11 @@ const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail }) => 
     const handleLogout = async () => {
         try {
             setLoading(true);
-            await supabase.auth.signOut();
+            if (onLogout) {
+                await onLogout();
+            } else {
+                await supabase.auth.signOut();
+            }
         } catch (error) {
             console.error('Error signing out:', error);
         } finally {

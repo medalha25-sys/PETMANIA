@@ -71,6 +71,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, initialS
     const [services, setServices] = useState<Service[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('money');
+    const [focusedMethodId, setFocusedMethodId] = useState('money'); // For keyboard navigation
     const [amountReceived, setAmountReceived] = useState('');
     const [loading, setLoading] = useState(false);
     const [step, setStep] = useState<'cart' | 'payment'>('cart');
@@ -101,6 +102,14 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, initialS
             setSecondaryPaymentMethod(null);
         }
     }, [amountReceived, total]);
+
+    // Cleanup/Sync focused method
+    useEffect(() => {
+        if (step === 'payment') {
+            setFocusedMethodId(paymentMethod);
+        }
+    }, [step, paymentMethod]);
+
 
     // Auto-generate PIX payload
     useEffect(() => {
@@ -251,31 +260,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, initialS
         }));
     };
 
-    // Keyboard Navigation for Payment
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (!isOpen || step !== 'payment') return;
-
-            if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-                e.preventDefault();
-                const currentIndex = PAYMENT_METHODS.findIndex(p => p.id === paymentMethod);
-                const nextIndex = (currentIndex + 1) % PAYMENT_METHODS.length;
-                setPaymentMethod(PAYMENT_METHODS[nextIndex].id);
-            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-                e.preventDefault();
-                const currentIndex = PAYMENT_METHODS.findIndex(p => p.id === paymentMethod);
-                const prevIndex = (currentIndex - 1 + PAYMENT_METHODS.length) % PAYMENT_METHODS.length;
-                setPaymentMethod(PAYMENT_METHODS[prevIndex].id);
-            } else if (e.key === 'Enter' && e.ctrlKey) {
-                handleFinish();
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, step, paymentMethod]);
-
-
     const handleFinish = async () => {
         if (cart.length === 0) return;
         setLoading(true);
@@ -286,6 +270,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, initialS
                 finalMethod = `${paymentMethod}+${secondaryPaymentMethod}`;
             }
 
+            // 1. Create Transaction
             const { data: transaction, error: transError } = await supabase
                 .from('transactions')
                 .insert([{
@@ -300,6 +285,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, initialS
 
             if (transError) throw transError;
 
+            // 2. Create Transaction Items
             const itemsToInsert = cart.map(item => ({
                 transaction_id: transaction.id,
                 item_id: item.type === 'product' ? item.id : null,
@@ -312,18 +298,71 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, initialS
             const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
             if (itemsError) throw itemsError;
 
+            // 3. Decrement Stock
             for (const item of cart) {
                 if (item.type === 'product') {
                     await supabase.rpc('decrement_stock', { p_id: item.id, qty: item.quantity });
                 }
             }
 
+            // 4. Update Appointment Status
             if (initialService?.appointmentId) {
                 await supabase
                     .from('appointments')
                     .update({ status: 'completed' })
                     .eq('id', initialService.appointmentId);
             }
+
+            // 5. Insert into Financial Records
+            const METHOD_MAP: Record<string, string> = {
+                'money': 'Dinheiro',
+                'credit': 'Cartão de Crédito',
+                'debit': 'Cartão de Débito',
+                'pix': 'Pix'
+            };
+
+            const records = [];
+            const today = new Date().toISOString().split('T')[0];
+            const desc = `Venda PDV${initialService?.clientName ? ' - ' + initialService.clientName : ''}`;
+
+            if (needsSecondaryPayment && secondaryPaymentMethod) {
+                // Split Payment
+                records.push({
+                    description: desc + ' (Parcial - Dinheiro)',
+                    amount: amountReceivedNum,
+                    type: 'income',
+                    date: today,
+                    category: 'Vendas',
+                    payment_method: 'Dinheiro',
+                    created_at: new Date().toISOString()
+                });
+
+                // Entry 2: Secondary Part
+                records.push({
+                    description: desc + ' (Complemento)',
+                    amount: total - amountReceivedNum,
+                    type: 'income',
+                    date: today,
+                    category: 'Vendas',
+                    payment_method: METHOD_MAP[secondaryPaymentMethod] || secondaryPaymentMethod,
+                    created_at: new Date().toISOString()
+                });
+
+            } else {
+                // Single Payment
+                records.push({
+                    description: desc,
+                    amount: total,
+                    type: 'income',
+                    date: today,
+                    category: 'Vendas',
+                    payment_method: METHOD_MAP[paymentMethod] || paymentMethod,
+                    created_at: new Date().toISOString()
+                });
+            }
+
+            const { error: finError } = await supabase.from('financial_records').insert(records);
+            if (finError) throw finError;
 
             alert('Venda finalizada com sucesso! ✅');
             if (onSuccess) onSuccess();
@@ -336,6 +375,39 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, initialS
             setLoading(false);
         }
     };
+
+    // Keyboard Navigation for Payment
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (!isOpen || step !== 'payment') return;
+
+            // Arrow Navigation (Moves Focus)
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const currentIndex = PAYMENT_METHODS.findIndex(p => p.id === focusedMethodId);
+                const nextIndex = (currentIndex + 1) % PAYMENT_METHODS.length;
+                setFocusedMethodId(PAYMENT_METHODS[nextIndex].id);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const currentIndex = PAYMENT_METHODS.findIndex(p => p.id === focusedMethodId);
+                const prevIndex = (currentIndex - 1 + PAYMENT_METHODS.length) % PAYMENT_METHODS.length;
+                setFocusedMethodId(PAYMENT_METHODS[prevIndex].id);
+
+                // Enter Selection
+            } else if (e.key === 'Enter') {
+                if (e.ctrlKey) {
+                    handleFinish();
+                } else {
+                    e.preventDefault();
+                    setPaymentMethod(focusedMethodId);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, step, focusedMethodId]);
+
 
     if (!isOpen) return null;
 
@@ -553,20 +625,36 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, initialS
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 shrink-0">Forma de Pagamento</h3>
 
                                 <div className="flex-1 overflow-y-auto overflow-x-hidden pr-2 -mr-2 mb-4 min-h-0">
-                                    <div className="grid grid-cols-2 gap-3 mb-6">
-                                        {PAYMENT_METHODS.map((method, idx) => (
-                                            <button
-                                                key={method.id}
-                                                ref={el => paymentOptionsRef.current[idx] = el}
-                                                onClick={() => setPaymentMethod(method.id)}
-                                                className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${paymentMethod === method.id
-                                                    ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900'
-                                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-slate-300 dark:hover:border-slate-600'}`}
-                                            >
-                                                <span className="material-symbols-outlined text-2xl">{method.icon}</span>
-                                                <span className="font-bold text-sm">{method.label}</span>
-                                            </button>
-                                        ))}
+                                    {/* Vertical List for Payment Methods */}
+                                    <div className="flex flex-col gap-2 mb-6">
+                                        {PAYMENT_METHODS.map((method, idx) => {
+                                            const isSelected = paymentMethod === method.id;
+                                            const isFocused = focusedMethodId === method.id;
+
+                                            return (
+                                                <button
+                                                    key={method.id}
+                                                    ref={el => paymentOptionsRef.current[idx] = el}
+                                                    onClick={() => { setPaymentMethod(method.id); setFocusedMethodId(method.id); }}
+                                                    className={`p-4 rounded-xl border flex items-center gap-4 transition-all text-left relative
+                                                        ${isSelected
+                                                            ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 shadow-lg scale-[1.02] z-10'
+                                                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
+                                                        }
+                                                        ${isFocused && !isSelected ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-slate-900 border-primary' : ''}
+                                                    `}
+                                                >
+                                                    <div className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>
+                                                        <span className="material-symbols-outlined text-xl">{method.icon}</span>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <span className="font-bold text-base block">{method.label}</span>
+                                                        {isFocused && !isSelected && <span className="text-[10px] font-bold text-primary animate-pulse">Pressione Enter para selecionar</span>}
+                                                    </div>
+                                                    {isSelected && <span className="material-symbols-outlined">check_circle</span>}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
 
                                     {paymentMethod === 'money' && (
