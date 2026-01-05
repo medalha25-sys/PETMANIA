@@ -100,11 +100,11 @@ const App: React.FC = () => {
           path="/*"
           element={
             session || isGuest ? (
-              userRole === 'client' ? (
+              (userRole === 'client' || isGuest) ? (
                 <ClientLayout
                   darkMode={darkMode}
                   setDarkMode={setDarkMode}
-                  userEmail={session?.user.email || 'Cliente'}
+                  userEmail={isGuest ? 'Visitante' : (session?.user.email || 'Cliente')}
                   onLogout={handleLogout}
                 >
                   <Routes>
@@ -117,12 +117,12 @@ const App: React.FC = () => {
                 <Layout
                   darkMode={darkMode}
                   setDarkMode={setDarkMode}
-                  userEmail={session?.user.email || 'Visitante'}
-                  isGuest={isGuest}
+                  userEmail={session?.user.email || 'Usuário'}
+                  isGuest={false}
                   onLogout={handleLogout}
                 >
                   <Routes>
-                    <Route path="/" element={<Dashboard isGuest={isGuest} />} />
+                    <Route path="/" element={<Dashboard isGuest={false} />} />
                     <Route path="/clientes" element={<Clients />} />
                     <Route path="/pets" element={<PetsPage />} />
                     <Route path="/produtos" element={<ProductsPage />} />

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
-import CalendarModal from '../components/CalendarModal';
 import CheckoutModal from '../components/CheckoutModal';
 
 interface Appointment {
@@ -31,19 +30,13 @@ interface Client {
 
 const Agenda: React.FC = () => {
   const navigate = useNavigate();
-  // Current Week State (Simplified for MVP: Hardcoded days but mapped to real dates if needed, or just visual)
-  // For MVP, we will stick to a visual representation but allow creating appointments on specific dates.
-  // Ideally, we should generate the days dynamically.
 
+  // State
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-
-  // Checkout State
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [checkoutData, setCheckoutData] = useState<any>(null);
-
   const [loading, setLoading] = useState(false);
 
   // Form State
@@ -56,100 +49,55 @@ const Agenda: React.FC = () => {
   const [serviceType, setServiceType] = useState('Banho & Tosa');
   const [notes, setNotes] = useState('');
 
-  const [filter, setFilter] = useState('all'); // 'all', 'bath', 'vet'
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('month'); // Default to month view
-  const [expandedDay, setExpandedDay] = useState<string | null>(null); // For double-click detail view
+  // View State
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
+  const [currentDate, setCurrentDate] = useState(new Date());
 
-  const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set());
-
-  const hours = Array.from({ length: 15 }, (_, i) => i + 7); // 7am to 9pm
-
-  // Helper for local date string YYYY-MM-DD
-  const getLocalDateString = (date: Date) => {
-    const offset = date.getTimezoneOffset() * 60000;
-    const local = new Date(date.getTime() - offset);
-    return local.toISOString().split('T')[0];
-  };
-
-  // Helper to get days for Month View (6 weeks grid)
-  const getMonthDays = () => {
-    const curr = new Date(); // Ideally use a selected date state for navigation
-    const year = curr.getFullYear();
-    const month = curr.getMonth();
-
-    const firstDay = new Date(year, month, 1);
-
-    // Start from the Sunday before the first day
-    const startDate = new Date(firstDay);
-    startDate.setDate(firstDay.getDate() - firstDay.getDay()); // 0 is Sunday
-
+  // Helper: Get range for week/month
+  const getDaysInView = () => {
     const days = [];
-    // 6 weeks * 7 days = 42 days to ensure full grid
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(startDate);
-      d.setDate(startDate.getDate() + i);
-      days.push({
-        name: d.toLocaleDateString('pt-BR', { weekday: 'short' }),
-        dateNum: d.getDate(),
-        fullDate: getLocalDateString(d),
-        isCurrentMonth: d.getMonth() === month,
-        active: d.getDate() === new Date().getDate() && d.getMonth() === new Date().getMonth()
-      });
-    }
-    return days;
-  };
-
-  // Generate dates based on view mode (Day/Week)
-  const getVisibleDays = () => {
-    if (viewMode === 'month') return [];
-
-    const curr = new Date();
-    const days = [];
+    const curr = new Date(currentDate);
 
     if (viewMode === 'day') {
-      days.push({
-        name: curr.toLocaleDateString('pt-BR', { weekday: 'long' }),
-        dateNum: curr.getDate(),
-        fullDate: getLocalDateString(curr),
-        active: true
-      });
-    } else {
-      const first = curr.getDate() - curr.getDay(); // Start Week on Sunday (0) to match month view standard
+      days.push(new Date(curr));
+    } else if (viewMode === 'week') {
+      // Start from Monday (or Sunday if preferred, doing Monday here)
+      const day = curr.getDay();
+      const diff = curr.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+      const monday = new Date(curr.setDate(diff));
+
       for (let i = 0; i < 7; i++) {
-        let next = new Date(curr.getTime());
-        next.setDate(first + i);
-        days.push({
-          name: next.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
-          dateNum: next.getDate(),
-          fullDate: getLocalDateString(next),
-          active: next.getDate() === curr.getDate()
-        });
+        const next = new Date(monday);
+        next.setDate(monday.getDate() + i);
+        days.push(next);
+      }
+    } else {
+      // Month view logic later if needed, focusing on Week/Day Grid first
+      const year = curr.getFullYear();
+      const month = curr.getMonth();
+      const date = new Date(year, month, 1);
+      while (date.getMonth() === month) {
+        days.push(new Date(date));
+        date.setDate(date.getDate() + 1);
       }
     }
     return days;
   };
 
-  const [days, setDays] = useState(getVisibleDays());
-  const [monthGrid, setMonthGrid] = useState(getMonthDays());
+  const daysInView = getDaysInView();
+  const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 - 20:00
 
-  useEffect(() => {
-    if (viewMode === 'month') {
-      setMonthGrid(getMonthDays());
-    } else {
-      setDays(getVisibleDays());
-    }
-  }, [viewMode]);
-
+  // Fetch Data
   useEffect(() => {
     fetchAppointments();
     fetchClients();
   }, []);
 
   const fetchAppointments = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('appointments')
       .select('*, client:clients(full_name, avatar_url, mobile), pet:pets(name)')
-      .neq('status', 'completed');
+      .neq('status', 'cancelled');
     if (data) setAppointments(data);
   };
 
@@ -158,6 +106,7 @@ const Agenda: React.FC = () => {
     if (data) setClients(data);
   };
 
+  // Form Helpers
   useEffect(() => {
     if (selectedClient) {
       const fetchPets = async () => {
@@ -171,168 +120,6 @@ const Agenda: React.FC = () => {
     }
   }, [selectedClient]);
 
-  const handleWhatsAppReminder = (apt: Appointment) => {
-    if (!apt.client?.mobile) {
-      alert('Cliente sem número de celular cadastrado.');
-      return;
-    }
-
-    const cleanNumber = apt.client.mobile.replace(/\D/g, '');
-    const message = `Olá ${apt.client.full_name}, lembrete do seu agendamento para ${apt.service_type} no dia ${new Date(apt.date + 'T00:00:00').toLocaleDateString('pt-BR')} às ${apt.start_time}.`;
-
-    window.open(`https://wa.me/55${cleanNumber}?text=${encodeURIComponent(message)}`, '_blank');
-  };
-
-  // Bulk Delete State
-  // Bulk Delete State
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | 'selected' | null>(null);
-
-  const toggleSelection = (id: string) => {
-    const newSet = new Set(selectedApps);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
-    setSelectedApps(newSet);
-  };
-
-  // Keyboard Shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') &&
-        !isModalOpen &&
-        !showDeleteConfirm &&
-        !isCheckoutOpen &&
-        !isCalendarOpen &&
-        !(e.target instanceof HTMLInputElement) &&
-        !(e.target instanceof HTMLTextAreaElement)
-      ) {
-        if (selectedApps.size > 0) {
-          e.preventDefault();
-          triggerBulkDelete();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedApps, isModalOpen, showDeleteConfirm, isCheckoutOpen, isCalendarOpen]);
-
-  const handleDeleteAppointment = (id: string) => {
-    setDeleteTarget(id);
-    setShowDeleteConfirm(true);
-  };
-
-  const triggerBulkDelete = () => {
-    if (selectedApps.size === 0) return;
-    setDeleteTarget('selected');
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-
-    try {
-      let idsToDelete: string[] = [];
-
-      if (deleteTarget === 'selected') {
-        idsToDelete = Array.from(selectedApps);
-      } else {
-        idsToDelete = [deleteTarget];
-      }
-
-      const { error } = await supabase.from('appointments').delete().in('id', idsToDelete);
-
-      if (error) throw error;
-
-      // Update local state by removing the deleted appointments
-      setAppointments(prev => prev.filter(a => !idsToDelete.includes(a.id)));
-
-      // Clear selection logic
-      if (deleteTarget === 'selected') {
-        setSelectedApps(new Set());
-      } else if (selectedApps.has(deleteTarget)) {
-        const newSet = new Set(selectedApps);
-        newSet.delete(deleteTarget);
-        setSelectedApps(newSet);
-      }
-
-      setShowDeleteConfirm(false);
-      setDeleteTarget(null);
-
-    } catch (error) {
-      console.error('Error deleting appointment(s):', error);
-      alert('Erro ao excluir agendamento(s).');
-    }
-  };
-
-  // Temp Data Generator
-  const generateMockData = async () => {
-    if (!confirm('Isso vai gerar agendamentos para os próximos 5 dias. Continuar?')) return;
-    setLoading(true);
-    try {
-      // Get all clients
-      const { data: clientsData } = await supabase.from('clients').select('id');
-      if (!clientsData || clientsData.length === 0) {
-        alert('Precisa de clientes cadastrados primeiro!');
-        return;
-      }
-
-      const today = new Date();
-      const newAppointments = [];
-      const services = ['Banho & Tosa', 'Consulta Veterinária', 'Vacinação', 'Exame'];
-
-      // Generate for the next 5 days
-      for (let i = 0; i < 5; i++) {
-        const currentDate = new Date(today);
-        currentDate.setDate(today.getDate() + i);
-
-        // Create 10-15 random appointments per day
-        const count = Math.floor(Math.random() * 6) + 10; // 10 to 15
-
-        for (let j = 0; j < count; j++) {
-          const client = clientsData[Math.floor(Math.random() * clientsData.length)];
-          const service = services[Math.floor(Math.random() * services.length)];
-
-          // Random time between 8 and 18
-          const startHour = Math.floor(Math.random() * 10) + 8;
-          const startMin = Math.random() > 0.5 ? '00' : '30';
-          const endHour = startMin === '30' ? startHour + 1 : startHour + 1;
-          const endMin = startMin;
-
-          const dateStr = getLocalDateString(currentDate);
-
-          newAppointments.push({
-            client_id: client.id,
-            date: dateStr,
-            start_time: `${startHour}:${startMin}`,
-            end_time: `${endHour}:${endMin}`, // 1h duration approx
-            service_type: service,
-            status: 'confirmed',
-            notes: 'Gerado automaticamente'
-          });
-        }
-      }
-
-      // Batch insert (chunks of 100 just to be safe)
-      for (let i = 0; i < newAppointments.length; i += 100) {
-        const chunk = newAppointments.slice(i, i + 100);
-        const { error } = await supabase.from('appointments').insert(chunk);
-        if (error) console.error('Error inserting chunk', error);
-      }
-
-      alert('Dados gerados para 5 dias com sucesso!');
-      fetchAppointments();
-    } catch (err) {
-      console.error(err);
-      alert('Erro ao gerar dados');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -345,15 +132,13 @@ const Agenda: React.FC = () => {
         end_time: endTime,
         service_type: serviceType,
         notes,
-        status: 'confirmed' // Default status
+        status: 'confirmed'
       });
-
       if (error) throw error;
-
       alert('Agendamento criado com sucesso!');
       setIsModalOpen(false);
       fetchAppointments();
-      // Reset form
+      // Reset
       setSelectedClient('');
       setSelectedPet('');
       setClientPets([]);
@@ -369,572 +154,355 @@ const Agenda: React.FC = () => {
     }
   };
 
-  // Helper to calculate position and height of appointment card
-  const getAppointmentStyle = (apt: Appointment) => {
-    const startHour = parseInt(apt.start_time.split(':')[0]);
-    const startMin = parseInt(apt.start_time.split(':')[1]);
-    const endHour = parseInt(apt.end_time.split(':')[0]);
-    const endMin = parseInt(apt.end_time.split(':')[1]);
-
-    const startTotalMinutes = (startHour - 7) * 60 + startMin; // 7 is start of day
-    const durationMinutes = ((endHour * 60) + endMin) - ((startHour * 60) + startMin);
-
-    // Increased height for better readability
-    const hourHeight = 120;
-
-    // px per hour
-    const top = (startTotalMinutes / 60) * hourHeight;
-    const height = (durationMinutes / 60) * hourHeight;
-
-    return {
-      top: `${top}px`,
-      height: `${height}px`
-    };
+  // Component Helpers
+  const getLocalDateString = (date: Date) => {
+    const offset = date.getTimezoneOffset() * 60000;
+    const local = new Date(date.getTime() - offset);
+    return local.toISOString().split('T')[0];
   };
 
-  // Helpers for Month View styling
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear();
+  };
+
   const getServiceColor = (type: string) => {
     switch (type) {
-      case 'Banho & Tosa': return 'bg-blue-600 border-blue-700 text-white';
-      case 'Consulta Veterinária': return 'bg-purple-600 border-purple-700 text-white';
-      case 'Vacinação': return 'bg-orange-500 border-orange-600 text-white';
-      case 'Exame': return 'bg-emerald-600 border-emerald-700 text-white';
-      default: return 'bg-slate-600 border-slate-700 text-white';
+      case 'Banho & Tosa': return 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300';
+      case 'Consulta Veterinária': return 'bg-purple-50 border-purple-500 text-purple-700 dark:bg-purple-900/20 dark:border-purple-700 dark:text-purple-300';
+      case 'Vacinação': return 'bg-orange-50 border-orange-500 text-orange-700 dark:bg-orange-900/20 dark:border-orange-700 dark:text-orange-300';
+      case 'Exame': return 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-300';
+      default: return 'bg-slate-50 border-slate-500 text-slate-700 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300';
     }
   };
 
+  const getServiceIcon = (type: string) => {
+    switch (type) {
+      case 'Banho & Tosa': return 'shower';
+      case 'Consulta Veterinária': return 'stethoscope';
+      case 'Vacinação': return 'vaccines';
+      case 'Exame': return 'lab_panel';
+      default: return 'event';
+    }
+  };
+
+  const getUpcomingAppointments = () => {
+    const todayStr = getLocalDateString(new Date());
+    return appointments
+      .filter(a => a.date >= todayStr && a.status !== 'cancelled')
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return a.start_time.localeCompare(b.start_time);
+      })
+      .slice(0, 4);
+  };
+
   return (
-    <div className="flex flex-col min-h-full bg-background-light dark:bg-background-dark relative">
-      {/* Page Header */}
-      <div className="flex flex-col gap-4 px-6 py-5 border-b border-slate-200 dark:border-slate-800 shrink-0">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Calendário de Agendamentos</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Gerencie os horários de banho, tosa e consultas veterinárias.</p>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={generateMockData} className="hidden sm:flex h-10 items-center px-4 rounded-xl border border-pink-200 bg-pink-50 text-pink-700 text-sm font-bold hover:bg-pink-100 transition-colors mr-2">
-              <span className="material-symbols-outlined mr-2 text-[18px]">science</span>
-              Gerar Teste
-            </button>
-            <button onClick={() => setIsCalendarOpen(true)} className="hidden sm:flex h-10 items-center px-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-surface-dark text-sm font-bold hover:bg-slate-50 transition-colors text-slate-700 dark:text-slate-200">
-              <span className="material-symbols-outlined mr-2 text-[18px]">calendar_month</span>
-              Calendário
-            </button>
-            <button className="hidden sm:flex h-10 items-center px-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-surface-dark text-sm font-bold hover:bg-slate-50 transition-colors text-slate-700 dark:text-slate-200">
-              <span className="material-symbols-outlined mr-2 text-[18px]">ios_share</span>
-              Exportar
-            </button>
-            <button onClick={async () => {
-              const { data: { session } } = await supabase.auth.getSession();
-              if (!session) {
-                navigate('/auth', { state: { isRegister: true } });
-                return;
-              }
-              setIsModalOpen(true);
-            }} className="h-10 px-4 bg-primary hover:bg-primary-dark text-slate-900 text-sm font-bold rounded-xl flex items-center shadow-lg shadow-primary/20 transition-all">
-              <span className="material-symbols-outlined mr-2 text-[20px]">add</span>
-              Novo Agendamento
-            </button>
-          </div>
+    <div className="flex flex-col h-screen bg-white dark:bg-background-dark">
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-surface-dark">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Calendário de Agendamentos</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Gerencie os horários de banho, tosa e consultas veterinárias.</p>
         </div>
 
-        {/* Filters Row */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mt-2">
-          <div className="flex items-center gap-3">
-            {selectedApps.size > 0 && (
-              <span className="text-xs font-bold bg-primary/20 text-primary-dark px-3 py-1 rounded-full animate-in fade-in">
-                {selectedApps.size} selecionado(s)
-              </span>
-            )}
-            <div className="flex bg-white dark:bg-surface-dark rounded-xl p-1 border border-slate-200 dark:border-slate-800 shadow-sm">
-              <button className="size-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-900 dark:text-white transition-colors">
-                <span className="material-symbols-outlined text-[20px]">chevron_left</span>
-              </button>
-              <span className="px-4 text-sm font-bold text-slate-900 dark:text-white min-w-[140px] text-center">
-                {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-              </span>
-              <button className="size-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-900 dark:text-white transition-colors">
-                <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-              </button>
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-              {/* View Mode Toggle */}
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 mr-4">
-                <button
-                  onClick={() => setViewMode('day')}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'day'
-                    ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
-                  Dia
-                </button>
-                <button
-                  onClick={() => setViewMode('week')}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'week'
-                    ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
-                  Semana
-                </button>
-                <button
-                  onClick={() => setViewMode('month')}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode === 'month'
-                    ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
-                  Mês
-                </button>
-              </div>
-
-              <button
-                onClick={() => setFilter('all')}
-                className={`flex h-8 items-center gap-2 px-3 rounded-lg text-xs font-bold transition-colors ${filter === 'all'
-                  ? 'bg-primary text-slate-900 ring-2 ring-primary ring-offset-1 dark:ring-offset-background-dark'
-                  : 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary/50'
-                  }`}
-              >
-                <span className="material-symbols-outlined text-[16px]">check</span> Todos
-              </button>
-              <button
-                onClick={() => setFilter('bath')}
-                className={`flex h-8 items-center gap-2 px-3 rounded-lg text-xs font-medium transition-colors ${filter === 'bath'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                  : 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary/50'
-                  }`}
-              >
-                <span className="material-symbols-outlined text-[16px] text-blue-500">shower</span> Banho & Tosa
-              </button>
-              <button
-                onClick={() => setFilter('vet')}
-                className={`flex h-8 items-center gap-2 px-3 rounded-lg text-xs font-medium transition-colors ${filter === 'vet'
-                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
-                  : 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary/50'
-                  }`}
-              >
-                <span className="material-symbols-outlined text-[16px] text-red-500">stethoscope</span> Veterinário
-              </button>
-            </div>
+        <div className="flex items-center gap-4">
+          {/* Date Navigation */}
+          <div className="flex items-center bg-gray-50 dark:bg-gray-800 rounded-full px-1 p-1 border border-gray-100 dark:border-gray-700">
+            <button onClick={() => {
+              const newDate = new Date(currentDate);
+              newDate.setDate(newDate.getDate() - (viewMode === 'week' ? 7 : 1));
+              setCurrentDate(newDate);
+            }} className="p-1 rounded-full hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm transition-all text-slate-500 dark:text-slate-400">
+              <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+            </button>
+            <span className="px-4 text-sm font-bold text-slate-700 dark:text-slate-200 min-w-[140px] text-center capitalize">
+              {currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            </span>
+            <button onClick={() => {
+              const newDate = new Date(currentDate);
+              newDate.setDate(newDate.getDate() + (viewMode === 'week' ? 7 : 1));
+              setCurrentDate(newDate);
+            }} className="p-1 rounded-full hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm transition-all text-slate-500 dark:text-slate-400">
+              <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+            </button>
           </div>
+
+          <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2"></div>
+
+          <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-surface-dark border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            <span className="material-symbols-outlined text-[18px]">ios_share</span>
+            Exportar
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-[#10b981] text-white rounded-xl text-sm font-bold hover:bg-[#059669] shadow-lg shadow-emerald-200/50 transition-all hover:scale-105"
+          >
+            <span className="material-symbols-outlined text-[20px]">add</span>
+            Novo Agendamento
+          </button>
         </div>
-      </div>
+      </header>
 
-      <div className="flex-1 relative">
-        <div className="flex flex-col flex-1 bg-slate-50 dark:bg-[#15281e] p-4">
-          <div className={`grid gap-px bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden shadow-sm ${viewMode === 'day' ? 'grid-cols-1' : 'grid-cols-7'}`}>
-
-            {/* Headers - Show for Week and Month modes, or adapted for Day */}
-            {viewMode !== 'day' && ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-              <div key={day} className="bg-white dark:bg-surface-dark py-2 text-center text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {day}
-              </div>
-            ))}
-
-            {/* Days Grid */}
-            {(viewMode === 'month' ? monthGrid : days).map((day, idx) => (
-              <div
-                key={`${day.dateNum}-${idx}`}
-                onDoubleClick={() => setExpandedDay(day.fullDate)}
-                className={`min-h-[80px] bg-white dark:bg-surface-dark p-2 flex flex-col gap-1 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 ${!day.isCurrentMonth && viewMode === 'month' ? 'bg-slate-50/50 dark:bg-slate-900/40 text-slate-400' : ''}`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${day.active ? 'bg-primary text-slate-900' : 'text-slate-700 dark:text-slate-300'}`}>
-                    {day.dateNum}
-                  </span>
-                  {viewMode === 'day' && <span className="text-sm font-bold text-slate-500 uppercase">{day.name}</span>}
-                </div>
-
-                {/* Appointment Stack */}
-                <div className="flex flex-col gap-1">
-                  {appointments
-                    .filter(apt => apt.date === day.fullDate)
-                    .filter(apt => {
-                      if (filter === 'all') return true;
-                      if (filter === 'bath') return apt.service_type === 'Banho & Tosa';
-                      if (filter === 'vet') return ['Consulta Veterinária', 'Vacinação', 'Exame'].includes(apt.service_type);
-                      return true;
-                    })
-                    .map(apt => (
-                      <div
-                        key={apt.id}
-                        onClick={(e) => {
-                          e.stopPropagation(); // Avoid triggering day click
-                          if (e.ctrlKey || e.metaKey) {
-                            const newSelected = new Set(selectedApps);
-                            if (newSelected.has(apt.id)) {
-                              newSelected.delete(apt.id);
-                            } else {
-                              newSelected.add(apt.id);
-                            }
-                            setSelectedApps(newSelected);
-                          }
-                        }}
-                        className={`group relative flex items-center gap-3 p-3 rounded-xl border shadow-sm cursor-pointer hover:opacity-100 hover:shadow-md transition-all ${selectedApps.has(apt.id)
-                          ? 'ring-2 ring-offset-2 ring-primary dark:ring-offset-surface-dark z-20'
-                          : getServiceColor(apt.service_type)
-                          }`}
-                      >
-                        <div className="shrink-0 size-9 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
-                          {apt.client?.avatar_url ? (
-                            <img src={apt.client.avatar_url} alt="Av" className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-xs font-bold text-white">{apt.client?.full_name.charAt(0)}</span>
-                          )}
-                        </div>
-                        <div className="flex flex-col overflow-hidden w-full pr-6">
-                          <span className="text-sm font-bold leading-tight truncate">{apt.client?.full_name}</span>
-                          <span className="text-xs opacity-90 leading-tight truncate mt-0.5">
-                            {apt.service_type}
-                            {apt.pet?.name && <span className="opacity-75"> - {apt.pet.name}</span>}
-                          </span>
-                        </div>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteAppointment(apt.id);
-                          }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 size-7 bg-white/20 hover:bg-red-500 hover:text-white text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-10"
-                          title="Excluir"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">close</span>
-                        </button>
-                      </div>
-                    ))
-                  }
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {
-        expandedDay && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-surface-dark w-full max-w-2xl max-h-[80vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-              {/* Header */}
-              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white capitalize">
-                    {new Date(expandedDay + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </h2>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {appointments.filter(a => a.date === expandedDay).length} agendamentos
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {selectedApps.size > 0 && (
-                    <button
-                      onClick={triggerBulkDelete}
-                      className="px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm font-bold rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors animate-in fade-in slide-in-from-right-4"
-                    >
-                      Excluir ({selectedApps.size})
-                    </button>
-                  )}
-                  <button onClick={() => { setExpandedDay(null); setSelectedApps(new Set()); }} className="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center hover:bg-slate-300 transition-all">
-                    <span className="material-symbols-outlined text-sm">close</span>
+      {/* Main Content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Calendar Grid */}
+        <div className="flex-1 flex flex-col overflow-y-auto overflow-x-auto relative bg-white dark:bg-[#15281e]">
+          {/* View Toggle */}
+          <div className="flex items-center gap-2 px-6 py-3 border-b border-gray-50 dark:border-gray-800 bg-white dark:bg-[#15281e]">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2">Visualização:</span>
+            <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+              {['Dia', 'Semana', 'Mês'].map(m => {
+                const val = m === 'Dia' ? 'day' : m === 'Semana' ? 'week' : 'month';
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setViewMode(val as any)}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${viewMode === val ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                      }`}
+                  >
+                    {m}
                   </button>
-                </div>
-              </div>
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-100 dark:bg-[#0f1c15]">
-                {appointments.filter(a => a.date === expandedDay).length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-48 text-slate-400">
-                    <span className="material-symbols-outlined text-4xl mb-2">event_busy</span>
-                    <p>Sem agendamentos para este dia</p>
-                  </div>
-                ) : (
-                  appointments.filter(a => a.date === expandedDay).sort((a, b) => a.start_time.localeCompare(b.start_time)).map(apt => (
-                    // Detailed Card
-                    <div
-                      key={apt.id}
-                      className={`bg-white dark:bg-surface-dark p-4 rounded-xl shadow-sm border flex gap-4 hover:shadow-md transition-all cursor-pointer ${selectedApps.has(apt.id) ? 'border-primary ring-1 ring-primary' : 'border-slate-200 dark:border-slate-800'}`}
-                      onClick={() => toggleSelection(apt.id)}
-                    >
-                      <div className="flex items-center justify-center shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={selectedApps.has(apt.id)}
-                          onChange={() => toggleSelection(apt.id)}
-                          className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                      <div className="flex flex-col items-center justify-center w-14 shrink-0 border-r border-slate-100 dark:border-slate-800 pr-4">
-                        <span className="text-lg font-bold text-slate-900 dark:text-white">{apt.start_time}</span>
-                        <span className="text-xs text-slate-400">{apt.end_time}</span>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-bold text-slate-900 dark:text-white text-lg leading-tight">{apt.client?.full_name}</h3>
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mt-1 ${getServiceColor(apt.service_type).replace('border-', 'border ')}`}>
-                              {apt.service_type}
-                            </span>
-                            {apt.pet?.name && (
-                              <span className="ml-2 text-xs text-slate-500 font-medium bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
-                                {apt.pet.name}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="size-10 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
-                              {apt.client?.avatar_url ? <img src={apt.client.avatar_url} alt="Ava" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-bold text-slate-500">{apt.client?.full_name && apt.client.full_name.charAt(0)}</div>}
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleWhatsAppReminder(apt);
-                              }}
-                              className="size-9 rounded-full bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 hover:text-green-700 dark:hover:bg-green-900/40 flex items-center justify-center transition-all group"
-                              title="Enviar Lembrete WhatsApp"
-                            >
-                              <span className="material-symbols-outlined text-[18px]">chat</span>
-                            </button>
+                );
+              })}
+            </div>
 
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCheckoutData({
-                                  name: apt.service_type,
-                                  price: 0, // Should come from service catalog ideally
-                                  clientName: apt.client?.full_name,
-                                  clientId: apt.client_id,
-                                  petName: apt.pet?.name,
-                                  appointmentId: apt.id
-                                });
-                                setIsCheckoutOpen(true);
-                              }}
-                              className="size-9 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-900/40 flex items-center justify-center transition-all group"
-                              title="Finalizar / Pagar"
-                            >
-                              <span className="material-symbols-outlined text-[20px]">point_of_sale</span>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteAppointment(apt.id);
-                              }}
-                              className="size-9 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all group"
-                              title="Excluir Agendamento"
-                            >
-                              <span className="material-symbols-outlined text-[20px]">delete</span>
-                            </button>
+            <div className="ml-auto flex gap-2">
+              {['Banho & Tosa', 'Veterinário', 'Hospedagem'].map(f => (
+                <button key={f} className="px-3 py-1 rounded-full border border-gray-200 dark:border-gray-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1">
+                  <span className={`w-2 h-2 rounded-full ${f === 'Banho & Tosa' ? 'bg-blue-500' :
+                    f === 'Veterinário' ? 'bg-purple-500' : 'bg-orange-500'
+                    }`}></span>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Grid Header */}
+          <div className="flex border-b border-gray-100 dark:border-gray-800 min-w-[800px] bg-white dark:bg-[#15281e]">
+            <div className="w-20 shrink-0 border-r border-gray-50 dark:border-gray-800 bg-white dark:bg-surface-dark/50"></div> {/* Time Col Header */}
+            {daysInView.map((day, i) => (
+              <div key={i} className={`flex-1 py-3 text-center border-r border-gray-50 dark:border-gray-800 last:border-r-0 ${isToday(day) ? 'bg-emerald-50/30 dark:bg-emerald-900/10' : 'bg-white dark:bg-surface-dark'}`}>
+                <p className="text-xs font-bold text-slate-400 uppercase">{day.toLocaleDateString('pt-BR', { weekday: 'short' })}</p>
+                <p className={`text-xl font-black mt-1 ${isToday(day) ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
+                  {day.getDate()}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Grid Body */}
+          <div className="flex-1 relative min-w-[800px] bg-white dark:bg-[#15281e]">
+            {/* Time Rows */}
+            {hours.map((h, i) => (
+              <div key={h} className="flex h-[120px] border-b border-gray-50 dark:border-gray-800 group">
+                <div className="w-20 shrink-0 border-r border-gray-50 dark:border-gray-800 flex justify-center py-2 relative bg-white dark:bg-[#15281e]">
+                  <span className="text-xs font-bold text-slate-400 -mt-2.5 bg-white dark:bg-[#15281e] px-1 relative z-10">
+                    {h.toString().padStart(2, '0')}:00
+                  </span>
+                </div>
+                {daysInView.map((d, j) => (
+                  <div key={j} className="flex-1 border-r border-gray-50 dark:border-gray-800 last:border-r-0 relative group-hover:bg-gray-50/30 dark:group-hover:bg-white/5 transition-colors">
+                    {/* Render Appointments here */}
+                    {appointments.filter(a =>
+                      a.date === getLocalDateString(d) &&
+                      parseInt(a.start_time.split(':')[0]) === h
+                    ).map(apt => {
+                      const startMin = parseInt(apt.start_time.split(':')[1]);
+                      // const duration = 60; 
+
+                      const style = {
+                        top: `${(startMin / 60) * 100}%`,
+                        height: '90%',
+                        minHeight: '40px'
+                      };
+
+                      return (
+                        <div
+                          key={apt.id}
+                          className={`absolute left-1 right-1 rounded-lg border-l-4 p-2 shadow-sm cursor-pointer hover:shadow-md transition-all z-10 ${getServiceColor(apt.service_type)} bg-white dark:bg-surface-dark`}
+                          style={style}
+                          onClick={() => {
+                            setCheckoutData({
+                              name: apt.service_type,
+                              price: 0,
+                              clientName: apt.client?.full_name,
+                              clientId: apt.client_id,
+                              petName: apt.pet?.name,
+                              appointmentId: apt.id
+                            });
+                            setIsCheckoutOpen(true);
+                          }}
+                        >
+                          <div className="flex items-start gap-2 h-full overflow-hidden">
+                            <div className="shrink-0 pt-0.5">
+                              {apt.client?.avatar_url ? (
+                                <img src={apt.client.avatar_url} className="w-6 h-6 rounded-full object-cover" alt="" />
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold dark:text-white">
+                                  {apt.client?.full_name.charAt(0)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold truncate leading-tight dark:text-white">{apt.client?.full_name}</p>
+                              <p className="text-[10px] opacity-80 truncate leading-tight mt-0.5 dark:text-slate-300">{apt.service_type}</p>
+                            </div>
                           </div>
                         </div>
-                        {apt.notes && (
-                          <div className="mt-3 text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800/50">
-                            <span className="font-bold mr-1">Nota:</span> {apt.notes}
-                          </div>
-                        )}
-                      </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            {/* Current Time Line (Mocked position for visual) */}
+            <div className="absolute left-20 right-0 top-[350px] border-t-2 border-red-500 z-20 pointer-events-none opacity-50">
+              <div className="absolute -left-1.5 -top-1.5 w-3 h-3 bg-red-500 rounded-full"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar Navigation (Right) */}
+        <div className="w-[300px] border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-surface-dark flex flex-col">
+          <div className="p-6">
+            <h3 className="font-bold text-slate-900 dark:text-white mb-4">Próximos</h3>
+            <div className="space-y-4">
+              {getUpcomingAppointments().length === 0 ? (
+                <p className="text-sm text-slate-400">Nenhum agendamento próximo.</p>
+              ) : (
+                getUpcomingAppointments().map(apt => (
+                  <div key={apt.id} className="p-4 rounded-2xl border border-red-100 dark:border-red-900/30 bg-red-50/30 dark:bg-red-900/10 flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white dark:bg-surface-dark border border-red-100 dark:border-red-900/30 flex items-center justify-center shrink-0 shadow-sm text-red-500 dark:text-red-400">
+                      <span className="material-symbols-outlined text-[20px]">{getServiceIcon(apt.service_type)}</span>
                     </div>
-                  ))
-                )}
-              </div>
-              {/* Footer Actions */}
-              <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-surface-dark flex justify-end">
-                <button
-                  onClick={async () => {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (!session) {
-                      navigate('/auth', { state: { isRegister: true } });
-                      return;
-                    }
-                    setDate(expandedDay);
-                    setIsModalOpen(true);
-                    setExpandedDay(null);
-                  }}
-                  className="px-4 py-2 bg-primary text-slate-900 rounded-lg font-bold shadow-lg shadow-primary/20 hover:scale-105 transition-transform flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined">add</span>
-                  Adicionar neste dia
-                </button>
-              </div>
+                    <div>
+                      <p className="text-xs font-bold text-red-500 dark:text-red-400 mb-0.5">
+                        {new Date(apt.date + 'T' + apt.start_time).getTime() - new Date().getTime() < 3600000 ? 'Começa em breve' : apt.start_time}
+                      </p>
+                      <h4 className="font-bold text-slate-900 dark:text-white">{apt.pet?.name || 'Pet'}</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{apt.service_type}</p>
+                    </div>
+                    <div className="ml-auto w-2 h-2 rounded-full bg-red-400 mt-1.5"></div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-        )
-      }
 
-      {/* Modal Novo Agendamento */}
-      {
-        isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 animate-in fade-in zoom-in duration-200">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Novo Agendamento</h2>
-                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors">
-                  <span className="material-symbols-outlined">close</span>
-                </button>
-              </div>
-
-              <form onSubmit={handleSave} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Cliente</label>
-                  <select
-                    required
-                    value={selectedClient}
-                    onChange={(e) => setSelectedClient(e.target.value)}
-                    className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-4 focus:ring-primary focus:border-primary dark:text-white"
-                  >
-                    <option value="" className="text-slate-900 bg-white dark:bg-surface-dark dark:text-white">Selecione um cliente</option>
-                    {clients.map(client => (
-                      <option key={client.id} value={client.id} className="text-slate-900 bg-white dark:bg-surface-dark dark:text-white">{client.full_name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {selectedClient && (
-                  <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Pet (Opcional)</label>
-                    <select
-                      value={selectedPet}
-                      onChange={(e) => setSelectedPet(e.target.value)}
-                      className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-4 focus:ring-primary focus:border-primary dark:text-white"
-                    >
-                      <option value="" className="text-slate-900 bg-white dark:bg-surface-dark dark:text-white">Selecione o pet...</option>
-                      {clientPets.map(pet => (
-                        <option key={pet.id} value={pet.id} className="text-slate-900 bg-white dark:bg-surface-dark dark:text-white">{pet.name}</option>
-                      ))}
-                    </select>
+          <div className="p-6 border-t border-gray-100 dark:border-gray-800">
+            <h3 className="font-bold text-slate-900 dark:text-white mb-4">Equipe Disponível</h3>
+            <div className="space-y-4">
+              {[
+                { name: 'Ana Souza', role: 'Banho e Tosa', status: 'online' },
+                { name: 'Carlos M.', role: 'Veterinário', status: 'busy' },
+                { name: 'Julia P.', role: 'Recepcionista', status: 'online' }
+              ].map((staff, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                      <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${staff.name}`} alt="" />
+                    </div>
+                    <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-surface-dark ${staff.status === 'online' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
                   </div>
-                )}
-
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Data</label>
-                  <input
-                    type="date"
-                    required
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-4 focus:ring-primary focus:border-primary dark:text-white"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Início</label>
-                    <input
-                      type="time"
-                      required
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-4 focus:ring-primary focus:border-primary dark:text-white"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Fim</label>
-                    <input
-                      type="time"
-                      required
-                      value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-4 focus:ring-primary focus:border-primary dark:text-white"
-                    />
+                  <div>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">{staff.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{staff.role}</p>
                   </div>
                 </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Tipo de Serviço</label>
-                  <select
-                    value={serviceType}
-                    onChange={(e) => setServiceType(e.target.value)}
-                    className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-4 focus:ring-primary focus:border-primary dark:text-white"
-                  >
-                    <option value="Banho & Tosa" className="text-slate-900 bg-white dark:bg-surface-dark dark:text-white">Banho & Tosa</option>
-                    <option value="Consulta Veterinária" className="text-slate-900 bg-white dark:bg-surface-dark dark:text-white">Consulta Veterinária</option>
-                    <option value="Vacinação" className="text-slate-900 bg-white dark:bg-surface-dark dark:text-white">Vacinação</option>
-                    <option value="Exame" className="text-slate-900 bg-white dark:bg-surface-dark dark:text-white">Exame</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Notas</label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full h-24 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent p-4 focus:ring-primary focus:border-primary dark:text-white resize-none"
-                    placeholder="Observações importantes..."
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full h-12 rounded-xl bg-primary hover:bg-primary-dark text-slate-900 font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2 mt-4"
-                >
-                  {loading && <span className="material-symbols-outlined animate-spin text-sm">refresh</span>}
-                  {loading ? 'Agendando...' : 'Confirmar Agendamento'}
-                </button>
-              </form>
+              ))}
             </div>
           </div>
-        )
-      }
 
-      {/* Calendar Modal */}
-      <CalendarModal
-        isOpen={isCalendarOpen}
-        onClose={() => setIsCalendarOpen(false)}
-        onSelectDate={(date) => {
-          setDate(date);
-          setIsModalOpen(true);
-          setIsCalendarOpen(false);
-        }}
-        appointments={appointments}
-      />
+          <div className="mt-auto p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800">
+            <button className="w-full py-2 flex items-center justify-center gap-2 text-sm font-bold text-slate-500 hover:text-primary transition-colors dark:text-slate-400 dark:hover:text-primary">
+              <span className="material-symbols-outlined text-[18px]">history</span>
+              Ver histórico recente
+            </button>
+          </div>
+        </div>
+      </div>
 
+      {/* Checkout Modal */}
       <CheckoutModal
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
-        initialService={checkoutData}
+        appointmentData={checkoutData}
         onSuccess={() => {
+          setIsCheckoutOpen(false);
           fetchAppointments();
         }}
       />
 
-      {/* Confirmation Modal */}
-      {
-        showDeleteConfirm && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden p-6 animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-800">
-              <div className="flex flex-col items-center text-center gap-4">
-                <div className="size-12 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-2xl">delete</span>
+      {/* Modal Novo Agendamento */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Novo Agendamento</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-red-500 transition-colors"><span className="material-symbols-outlined">close</span></button>
+            </div>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Cliente</label>
+                <select
+                  value={selectedClient}
+                  onChange={e => setSelectedClient(e.target.value)}
+                  className="w-full h-11 rounded-xl border-gray-200 bg-gray-50 px-3 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-primary focus:border-primary"
+                  required
+                >
+                  <option value="" className="dark:bg-surface-dark">Selecione...</option>
+                  {clients.map(c => <option key={c.id} value={c.id} className="dark:bg-surface-dark">{c.full_name}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Data</label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={e => setDate(e.target.value)}
+                    className="w-full h-11 rounded-xl border-gray-200 bg-gray-50 px-3 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-primary focus:border-primary"
+                    required
+                  />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    {deleteTarget === 'selected'
-                      ? `Excluir ${selectedApps.size} agendamentos?`
-                      : 'Excluir agendamento?'}
-                  </h3>
-                  <p className="text-sm text-slate-500 mt-1">
-                    Essa ação não pode ser desfeita. Os dados serão removidos permanentemente.
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3 w-full mt-2">
-                  <button
-                    onClick={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
-                    className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={confirmDelete}
-                    className="h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm shadow-lg shadow-red-500/20 transition-all"
-                  >
-                    Excluir
-                  </button>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Hora</label>
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={e => setStartTime(e.target.value)}
+                    className="w-full h-11 rounded-xl border-gray-200 bg-gray-50 px-3 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-primary focus:border-primary"
+                    required
+                  />
                 </div>
               </div>
-            </div>
-          </div>
-        )
-      }
 
-    </div >
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Serviço</label>
+                <select
+                  value={serviceType}
+                  onChange={e => setServiceType(e.target.value)}
+                  className="w-full h-11 rounded-xl border-gray-200 bg-gray-50 px-3 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-primary focus:border-primary"
+                >
+                  <option className="dark:bg-surface-dark">Banho & Tosa</option>
+                  <option className="dark:bg-surface-dark">Consulta Veterinária</option>
+                  <option className="dark:bg-surface-dark">Vacinação</option>
+                  <option className="dark:bg-surface-dark">Exame</option>
+                </select>
+              </div>
+
+              <button type="submit" className="w-full h-12 bg-primary text-white font-bold rounded-xl mt-4 hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20">Confirmar</button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

@@ -14,7 +14,12 @@ const ClientDashboard: React.FC = () => {
 
     const fetchAppointments = async () => {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+
+        if (!user) {
+            setUserName('Visitante');
+            setLoading(false);
+            return;
+        }
 
         setUserName(user.user_metadata.full_name || 'Cliente');
 
@@ -116,15 +121,19 @@ const ClientDashboard: React.FC = () => {
                             <div className="size-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <span className="material-symbols-outlined text-4xl text-primary">calendar_today</span>
                             </div>
-                            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Nenhum agendamento encontrado</h3>
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+                                {userName === 'Visitante' ? 'Modo Visitante' : 'Nenhum agendamento encontrado'}
+                            </h3>
                             <p className="text-slate-500 mb-6 max-w-md mx-auto">
-                                Seu histórico está vazio. Que tal agendar um momento especial para o seu pet hoje?
+                                {userName === 'Visitante'
+                                    ? 'Crie uma conta para agendar serviços e acompanhar o histórico do seu pet.'
+                                    : 'Seu histórico está vazio. Que tal agendar um momento especial para o seu pet hoje?'}
                             </p>
                             <button
                                 onClick={() => navigate('/agendar')}
                                 className="text-primary font-bold hover:underline"
                             >
-                                Agendar agora
+                                {userName === 'Visitante' ? 'Ver Serviços Disponíveis' : 'Agendar agora'}
                             </button>
                         </div>
                     ) : (

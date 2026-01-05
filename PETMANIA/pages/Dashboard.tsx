@@ -31,6 +31,70 @@ const Dashboard: React.FC<DashboardProps> = ({ isGuest = false }) => {
   const [itemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Selection State
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleRowClick = (id: string, e: React.MouseEvent) => {
+    // Determine if we should toggle (Ctrl key) or select single
+    const isMultiSelect = e.ctrlKey || e.metaKey;
+
+    if (isMultiSelect) {
+      const newSelected = new Set(selectedIds);
+      if (newSelected.has(id)) {
+        newSelected.delete(id);
+      } else {
+        newSelected.add(id);
+      }
+      setSelectedIds(newSelected);
+    } else {
+      // If clicking already selected item without ctrl, deselect all? No, usually selects just that one.
+      // Or if we want to allow selecting a row to open details later, standard behavior is select single.
+      // If the user meant to just 'select' to highlight:
+      if (selectedIds.has(id) && selectedIds.size === 1) {
+        setSelectedIds(new Set()); // Deselect if clicking the only selected one
+      } else {
+        setSelectedIds(new Set([id]));
+      }
+    }
+  };
+
+  // Keyboard Listener for Delete
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (e.key === 'Delete' && selectedIds.size > 0) {
+        if (confirm(`Tem certeza que deseja cancelar ${selectedIds.size} agendamento(s)?`)) {
+          // Cancel selected appointments
+          const idsToDelete = Array.from(selectedIds);
+
+          // Optimistic update
+          setAppointments(prev => prev.map(app =>
+            idsToDelete.includes(app.id) ? { ...app, status: 'Cancelado' } : app
+          ).filter(app => app.status !== 'Cancelado')); // Remove linearly if we want them gone instantly
+          // Actually, let's keep them if view allows, but standard 'delete' usually removes. 
+          // The user said "apagar" (delete), but Dashboard usually hides cancelled.
+          // Let's hide them from state to simulate deletion.
+
+          // DB Update
+          const { error } = await supabase
+            .from('appointments')
+            .update({ status: 'cancelled' })
+            .in('id', idsToDelete);
+
+          if (error) {
+            console.error('Error deleting:', error);
+            fetchAppointments(); // Revert
+          } else {
+            setSelectedIds(new Set());
+            alert('Agendamentos apagados com sucesso!');
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIds, appointments]);
+
   const toggleMenu = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     setOpenMenuId(openMenuId === id ? null : id);
@@ -51,6 +115,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isGuest = false }) => {
       fetchDailyStats();
     }
   }, [isGuest]);
+
 
   const fetchDailyStats = async () => {
     const today = new Date().toISOString().split('T')[0];
@@ -381,7 +446,14 @@ const Dashboard: React.FC<DashboardProps> = ({ isGuest = false }) => {
                     </tr>
                   ) : (
                     currentItems.map((app) => (
-                      <tr key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors relative">
+                      <tr
+                        key={app.id}
+                        onClick={(e) => handleRowClick(app.id, e)}
+                        className={`transition-colors relative cursor-pointer select-none ${selectedIds.has(app.id)
+                            ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500'
+                            : 'hover:bg-gray-50 dark:hover:bg-gray-800/30 border-l-2 border-l-transparent'
+                          }`}
+                      >
                         <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{app.time}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">

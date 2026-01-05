@@ -326,7 +326,7 @@ const PetsPage: React.FC = () => {
             fetchPets();
         } catch (error) {
             console.error(error);
-            alert('Erro ao salvar pet');
+            alert('Erro ao salvar pet: ' + (error.message || JSON.stringify(error)));
         } finally {
             setLoading(false);
         }

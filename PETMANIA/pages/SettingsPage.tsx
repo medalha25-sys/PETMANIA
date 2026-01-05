@@ -215,7 +215,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ darkMode, setDarkMode }) =>
                         onClick={() => setActiveTab('usuarios')}
                         className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'usuarios' ? 'bg-primary/10 text-primary' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
                     >
-                        Usuários
+                        Colaboradores
                     </button>
                     <button
                         onClick={() => setActiveTab('notificacoes')}
@@ -620,15 +620,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ darkMode, setDarkMode }) =>
                         <section className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm animate-in fade-in duration-300">
                             <div className="flex items-center justify-between mb-6">
                                 <div>
-                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Gerenciar Usuários</h3>
-                                    <p className="text-sm text-slate-500">Adicione e gerencie permissões de acesso.</p>
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Gerenciar Colaboradores</h3>
+                                    <p className="text-sm text-slate-500">Adicione e gerencie sua equipe.</p>
                                 </div>
                                 <button
                                     onClick={() => setShowUserModal(true)}
                                     className="p-2 bg-primary text-slate-900 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-primary-dark transition-colors"
                                 >
                                     <span className="material-symbols-outlined text-xl">add</span>
-                                    Novo Usuário
+                                    Novo Colaborador
                                 </button>
                             </div>
 
@@ -647,7 +647,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ darkMode, setDarkMode }) =>
                                                     {profile.full_name || 'Usuário Sem Nome'}
                                                     {profile.id === user?.id && <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">Você</span>}
                                                 </p>
-                                                <p className="text-xs text-slate-500">{profile.email}</p>
+                                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                    <span>{profile.email}</span>
+                                                    {profile.profession && (
+                                                        <>
+                                                            <span>•</span>
+                                                            <span>{profile.profession}</span>
+                                                        </>
+                                                    )}
+                                                    {profile.is_probation && (
+                                                        <span className="text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">Em Teste</span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-4">
@@ -655,7 +666,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ darkMode, setDarkMode }) =>
                                                 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                                                 : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                                                 }`}>
-                                                {profile.role === 'admin' ? 'Administrador' : 'Funcionário'}
+                                                {profile.role === 'admin' ? 'Administrador' : 'Colaborador'}
                                             </span>
 
                                             <div className="relative">
@@ -717,7 +728,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ darkMode, setDarkMode }) =>
                                                                 className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                                                             >
                                                                 <span className="material-symbols-outlined text-[18px]">delete</span>
-                                                                Excluir Usuário
+                                                                Excluir Colaborador
                                                             </button>
                                                         )}
                                                     </div>
@@ -729,7 +740,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ darkMode, setDarkMode }) =>
 
                                 {profiles.length === 0 && (
                                     <div className="text-center py-12 text-slate-500">
-                                        Nenhum usuário encontrado.
+                                        Nenhum colaborador encontrado.
                                     </div>
                                 )}
                             </div>

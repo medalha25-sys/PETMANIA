@@ -20,6 +20,11 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
     const [address, setAddress] = useState('');
     const [birthDate, setBirthDate] = useState('');
 
+    // New Fields
+    const [profession, setProfession] = useState('');
+    const [admissionDate, setAdmissionDate] = useState('');
+    const [isProbation, setIsProbation] = useState(false);
+
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -36,14 +41,17 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
                         cnh_category: cnhCategory,
                         phone: phone,
                         address: address,
-                        birth_date: birthDate
+                        birth_date: birthDate,
+                        profession: profession,
+                        admission_date: admissionDate,
+                        is_probation: isProbation
                     }
                 }
             });
 
             if (signUpError) throw signUpError;
 
-            // Create Profile in public table (for name lookup)
+            // Create Profile in public table
             if (data.user) {
                 const { error: profileError } = await supabase
                     .from('profiles')
@@ -51,13 +59,18 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
                         id: data.user.id,
                         email: email,
                         full_name: fullName,
-                        role: role
+                        role: role,
+                        profession: profession,
+                        admission_date: admissionDate || null,
+                        is_probation: isProbation,
+                        phone: phone,
+                        address: address,
+                        birth_date: birthDate || null,
+                        cnh_category: cnhCategory
                     }]);
 
                 if (profileError) {
                     console.error('Erro ao criar perfil:', profileError);
-                    // Don't throw here to avoid blocking valid auth creation if table is missing,
-                    // but warn user implicitly via console or just assume it's fine for now.
                 }
             }
 
@@ -73,8 +86,11 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
             setPhone('');
             setAddress('');
             setBirthDate('');
+            setProfession('');
+            setAdmissionDate('');
+            setIsProbation(false);
 
-            alert('Usuário cadastrado com sucesso! Verifique o email para confirmação se necessário.');
+            alert('Colaborador cadastrado com sucesso! Verifique o email para confirmação se necessário.');
 
         } catch (err: any) {
             console.error(err);
@@ -99,7 +115,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                 <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Novo Usuário</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Novo Colaborador</h3>
                     <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
                         <span className="material-symbols-outlined text-slate-500">close</span>
                     </button>
@@ -112,16 +128,28 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
                         </div>
                     )}
 
-                    <div className="space-y-1">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Nome Completo</label>
-                        <input
-                            type="text"
-                            required
-                            value={fullName}
-                            onChange={(e) => setFullName(e.target.value)}
-                            className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm dark:text-white focus:ring-2 focus:ring-primary/50 outline-none"
-                            placeholder="Nome do usuário"
-                        />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Nome Completo</label>
+                            <input
+                                type="text"
+                                required
+                                value={fullName}
+                                onChange={(e) => setFullName(e.target.value)}
+                                className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm dark:text-white focus:ring-2 focus:ring-primary/50 outline-none"
+                                placeholder="Nome do colaborador"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Profissão / Cargo</label>
+                            <input
+                                type="text"
+                                value={profession}
+                                onChange={(e) => setProfession(e.target.value)}
+                                className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm dark:text-white focus:ring-2 focus:ring-primary/50 outline-none"
+                                placeholder="Ex: Veterinário, Tosador"
+                            />
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -152,15 +180,24 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Função</label>
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Função (Sistema)</label>
                             <select
                                 value={role}
                                 onChange={(e) => setRole(e.target.value as 'admin' | 'employee')}
                                 className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm dark:text-white focus:ring-2 focus:ring-primary/50 outline-none"
                             >
-                                <option value="employee">Funcionário</option>
-                                <option value="admin">Administrador</option>
+                                <option value="employee">Funcionário (Acesso Limitado)</option>
+                                <option value="admin">Administrador (Acesso Total)</option>
                             </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Data de Admissão</label>
+                            <input
+                                type="date"
+                                value={admissionDate}
+                                onChange={(e) => setAdmissionDate(e.target.value)}
+                                className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm dark:text-white focus:ring-2 focus:ring-primary/50 outline-none"
+                            />
                         </div>
                     </div>
 
@@ -198,22 +235,35 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
                         />
                     </div>
 
-                    <div className="space-y-1">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Carteira de Habilitação (CNH)</label>
-                        <select
-                            value={cnhCategory}
-                            onChange={(e) => setCnhCategory(e.target.value)}
-                            className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm dark:text-white focus:ring-2 focus:ring-primary/50 outline-none"
-                        >
-                            <option value="">Não possui</option>
-                            <option value="A">A - Moto</option>
-                            <option value="B">B - Carro</option>
-                            <option value="AB">AB - Moto e Carro</option>
-                            <option value="C">C - Caminhão</option>
-                            <option value="D">D - Ônibus</option>
-                            <option value="E">E - Carreta</option>
-                        </select>
-                        <p className="text-xs text-slate-500">Selecione a categoria se o funcionário for dirigir veículos da empresa.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Carteira de Habilitação (CNH)</label>
+                            <select
+                                value={cnhCategory}
+                                onChange={(e) => setCnhCategory(e.target.value)}
+                                className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm dark:text-white focus:ring-2 focus:ring-primary/50 outline-none"
+                            >
+                                <option value="">Não possui</option>
+                                <option value="A">A - Moto</option>
+                                <option value="B">B - Carro</option>
+                                <option value="AB">AB - Moto e Carro</option>
+                                <option value="C">C - Caminhão</option>
+                                <option value="D">D - Ônibus</option>
+                                <option value="E">E - Carreta</option>
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-3 pt-6">
+                            <input
+                                type="checkbox"
+                                id="probation"
+                                checked={isProbation}
+                                onChange={(e) => setIsProbation(e.target.checked)}
+                                className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <label htmlFor="probation" className="text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+                                Em período de teste
+                            </label>
+                        </div>
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700 mt-2">
@@ -229,7 +279,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSuccess }) => 
                             disabled={loading}
                             className="px-6 py-2 bg-primary text-slate-900 font-bold rounded-xl shadow-lg hover:bg-primary-dark transition-all disabled:opacity-70 flex items-center gap-2"
                         >
-                            {loading ? 'Cadastrando...' : 'Cadastrar Usuário'}
+                            {loading ? 'Cadastrando...' : 'Cadastrar Colaborador'}
                         </button>
                     </div>
                 </form>

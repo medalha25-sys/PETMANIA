@@ -15,7 +15,7 @@ const ClientScheduling: React.FC = () => {
 
     // Selection State
     const [selectedPet, setSelectedPet] = useState<string | null>(null);
-    const [selectedService, setSelectedService] = useState<string | null>(null);
+    const [selectedServices, setSelectedServices] = useState<string[]>([]);
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [selectedTime, setSelectedTime] = useState<string>('');
     const [notes, setNotes] = useState('');
@@ -36,20 +36,25 @@ const ClientScheduling: React.FC = () => {
                 .select('*')
                 .eq('owner_id', user.id);
             if (petsData) setPets(petsData);
-
-            // Fetch Services
-            const { data: servicesData } = await supabase
-                .from('services')
-                .select('*')
-                .eq('active', true);
-            if (servicesData) setServices(servicesData);
         }
+
+        // Fetch Services (Available for guests too)
+        const { data: servicesData } = await supabase
+            .from('services')
+            .select('*')
+            .eq('active', true);
+        if (servicesData) setServices(servicesData);
+
         setLoading(false);
     };
 
     const handleNext = () => {
+        // If step 1 (Pet) ... wait, if I skipped step 1 using the button, step is 2.
+        // But if I am on step 1 and click "Continuar" (the main button), it enforces pet selection.
+        // That is fine. Guests use the specific "Ver Serviços" button to skip.
+
         if (step === 1 && !selectedPet) return alert('Selecione um pet');
-        if (step === 2 && !selectedService) return alert('Selecione um serviço');
+        if (step === 2 && selectedServices.length === 0) return alert('Selecione pelo menos um serviço');
         if (step === 3 && (!selectedDate || !selectedTime)) return alert('Selecione data e hora');
 
         if (step < 4) setStep(step + 1);
@@ -60,16 +65,40 @@ const ClientScheduling: React.FC = () => {
         else navigate('/portal');
     };
 
+    const toggleService = (serviceId: string) => {
+        setSelectedServices(prev => {
+            if (prev.includes(serviceId)) {
+                return prev.filter(id => id !== serviceId);
+            } else {
+                return [...prev, serviceId];
+            }
+        });
+    };
+
     const handleConfirm = async () => {
         try {
             setSubmitting(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Usuário não autenticado");
 
-            const pet = pets.find(p => p.id === selectedPet);
-            const service = services.find(s => s.id === selectedService);
+            if (!user) {
+                // Determine if we should redirect to login or register
+                if (window.confirm('Para confirmar o agendamento, você precisa entrar ou criar uma conta. Deseja fazer isso agora?')) {
+                    navigate('/auth', { state: { isRegister: true } });
+                }
+                setSubmitting(false);
+                return;
+            }
 
-            // Simple end time calculation (start + 1 hour default)
+            if (!selectedPet) throw new Error("Nenhum pet selecionado");
+
+            const selectedServicesDetails = services.filter(s => selectedServices.includes(s.id));
+            if (selectedServicesDetails.length === 0) throw new Error("Nenhum serviço selecionado");
+
+            const servicesNames = selectedServicesDetails.map(s => s.name).join(' + ');
+
+            // Simple end time calculation (start + 1 hour default per service? Or just 1 hour total? keeping simple 1h for now or maybe 1h per service?)
+            // Let's assume 1 slot for now to keep logic simple, or maybe more.
+            // Requirement doesn't specify duration logic. Keeping 1h default.
             const [hour, minute] = selectedTime.split(':').map(Number);
             const endHour = hour + 1;
             const endTime = `${endHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
@@ -77,13 +106,12 @@ const ClientScheduling: React.FC = () => {
             const { error } = await supabase.from('appointments').insert({
                 client_id: user.id,
                 pet_id: selectedPet,
-                service_type: service?.name || 'Serviço',
+                service_type: servicesNames,
                 date: selectedDate,
                 start_time: selectedTime,
                 end_time: endTime,
-                status: 'Pendente',
-                notes: notes,
-                created_by: user.id
+                status: 'pending',
+                notes: notes
             });
 
             if (error) throw error;
@@ -186,10 +214,23 @@ const ClientScheduling: React.FC = () => {
 
                                 {pets.length === 0 && (
                                     <div className="col-span-2 text-center py-8 bg-slate-50 dark:bg-slate-900 rounded-xl">
-                                        <p className="text-slate-500 mb-2">Você ainda não tem pets cadastrados.</p>
-                                        <p className="text-sm cursor-pointer hover:text-primary hover:underline" onClick={() => setShowPetModal(true)}>
-                                            Clique aqui para cadastrar seu primeiro pet agora.
+                                        <p className="text-slate-500 mb-2">
+                                            {/* We can check calling auth here or just assume if pets is 0 and we are in guest mode (implied by no pets and context) */}
+                                            Você ainda não tem pets cadastrados.
                                         </p>
+                                        <p className="text-sm cursor-pointer hover:text-primary hover:underline" onClick={() => setShowPetModal(true)}>
+                                            Clique aqui para cadastrar seu primeiro pet agora **(Requer Login)**.
+                                        </p>
+
+                                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Apenas visitando?</p>
+                                            <button
+                                                onClick={() => setStep(2)} // Skip to Services
+                                                className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
+                                            >
+                                                Ver Serviços e Preços
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
 
@@ -210,19 +251,19 @@ const ClientScheduling: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                             <span className="size-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-sm">2</span>
-                            Escolha o Serviço
+                            Escolha o Serviço (Selecione um ou mais)
                         </h2>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {services.map(service => (
                                 <button
                                     key={service.id}
-                                    onClick={() => setSelectedService(service.id)}
-                                    className={`p-6 border-2 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all ${selectedService === service.id
+                                    onClick={() => toggleService(service.id)}
+                                    className={`p-6 border-2 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all ${selectedServices.includes(service.id)
                                         ? 'border-primary bg-primary/10'
                                         : 'border-slate-100 dark:border-slate-800 hover:border-primary/50'
                                         }`}
                                 >
-                                    <div className={`size-12 rounded-full flex items-center justify-center text-xl ${selectedService === service.id ? 'bg-primary text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                                    <div className={`size-12 rounded-full flex items-center justify-center text-xl ${selectedServices.includes(service.id) ? 'bg-primary text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
                                         }`}>
                                         <span className="material-symbols-outlined">
                                             {service.name.toLowerCase().includes('banho') ? 'shower' :
@@ -233,6 +274,11 @@ const ClientScheduling: React.FC = () => {
                                         <h3 className="font-bold text-slate-900 dark:text-white text-sm">{service.name}</h3>
                                         <p className="text-green-600 font-bold text-sm mt-1">R$ {service.price},00</p>
                                     </div>
+                                    {selectedServices.includes(service.id) && (
+                                        <div className="absolute top-2 right-2 text-primary">
+                                            <span className="material-symbols-outlined text-lg">check_circle</span>
+                                        </div>
+                                    )}
                                 </button>
                             ))}
                         </div>
@@ -300,11 +346,43 @@ const ClientScheduling: React.FC = () => {
                                 <div className="size-12 rounded-full bg-green-100 flex items-center justify-center text-green-600">
                                     <span className="material-symbols-outlined">pets</span>
                                 </div>
-                                <div>
+                                <div className="flex-1">
                                     <p className="text-xs text-slate-500 uppercase font-bold">Pet</p>
-                                    <p className="font-bold text-slate-900 dark:text-white text-lg">
-                                        {pets.find(p => p.id === selectedPet)?.name}
-                                    </p>
+                                    {selectedPet ? (
+                                        <div className="flex justify-between items-center">
+                                            <p className="font-bold text-slate-900 dark:text-white text-lg">
+                                                {pets.find(p => p.id === selectedPet)?.name}
+                                            </p>
+                                            <button
+                                                onClick={() => setSelectedPet(null)}
+                                                className="text-xs text-primary font-bold hover:underline"
+                                            >
+                                                Alterar
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="mt-1">
+                                            <select
+                                                className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
+                                                onChange={(e) => setSelectedPet(e.target.value)}
+                                                defaultValue=""
+                                            >
+                                                <option value="" disabled>Selecione um pet...</option>
+                                                {pets.map(pet => (
+                                                    <option key={pet.id} value={pet.id}>{pet.name}</option>
+                                                ))}
+                                            </select>
+                                            {pets.length === 0 && (
+                                                <button
+                                                    onClick={() => setShowPetModal(true)}
+                                                    className="mt-2 text-xs text-primary font-bold hover:underline flex items-center gap-1"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">add</span>
+                                                    Cadastrar Novo Pet
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -313,10 +391,14 @@ const ClientScheduling: React.FC = () => {
                                     <span className="material-symbols-outlined">medical_services</span>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 uppercase font-bold">Serviço</p>
-                                    <p className="font-bold text-slate-900 dark:text-white text-lg">
-                                        {services.find(s => s.id === selectedService)?.name}
-                                    </p>
+                                    <p className="text-xs text-slate-500 uppercase font-bold">Serviço(s)</p>
+                                    <div className="flex flex-col">
+                                        {services.filter(s => selectedServices.includes(s.id)).map(service => (
+                                            <p key={service.id} className="font-bold text-slate-900 dark:text-white text-lg">
+                                                {service.name} <span className="text-sm font-normal text-slate-500">(R$ {service.price},00)</span>
+                                            </p>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 
@@ -335,7 +417,7 @@ const ClientScheduling: React.FC = () => {
                             <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
                                 <span className="text-slate-500">Total Estimado</span>
                                 <span className="text-2xl font-black text-slate-900 dark:text-white">
-                                    R$ {services.find(s => s.id === selectedService)?.price},00
+                                    R$ {services.filter(s => selectedServices.includes(s.id)).reduce((acc, s) => acc + s.price, 0)},00
                                 </span>
                             </div>
                         </div>

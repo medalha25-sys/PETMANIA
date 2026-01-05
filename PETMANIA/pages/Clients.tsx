@@ -309,10 +309,10 @@ const Clients: React.FC = () => {
                 onChange={(e) => setGender(e.target.value)}
                 className="w-full h-11 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent px-4 focus:ring-primary focus:border-primary appearance-none dark:text-white"
               >
-                <option value="">Selecione</option>
-                <option value="f">Feminino</option>
-                <option value="m">Masculino</option>
-                <option value="o">Outro</option>
+                <option value="" className="dark:bg-slate-800">Selecione</option>
+                <option value="f" className="dark:bg-slate-800">Feminino</option>
+                <option value="m" className="dark:bg-slate-800">Masculino</option>
+                <option value="o" className="dark:bg-slate-800">Outro</option>
               </select>
             </div>
           </div>
