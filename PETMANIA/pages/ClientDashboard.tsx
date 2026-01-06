@@ -46,10 +46,22 @@ const ClientDashboard: React.FC = () => {
 
     const getStatusColor = (status: string) => {
         switch (status.toLowerCase()) {
+            case 'confirmed':
             case 'confirmado': return 'bg-green-100 text-green-700 border-green-200';
+            case 'cancelled':
             case 'cancelado': return 'bg-red-100 text-red-700 border-red-200';
+            case 'pending':
             case 'pendente': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
             default: return 'bg-slate-100 text-slate-700 border-slate-200';
+        }
+    };
+
+    const getStatusLabel = (status: string) => {
+        switch (status.toLowerCase()) {
+            case 'confirmed': return 'Confirmado';
+            case 'cancelled': return 'Cancelado';
+            case 'pending': return 'Pendente';
+            default: return status;
         }
     };
 
@@ -152,7 +164,7 @@ const ClientDashboard: React.FC = () => {
                                             </div>
                                         </div>
                                         <span className={`px-2 py-1 rounded-lg text-xs font-bold border ${getStatusColor(apt.status)}`}>
-                                            {apt.status}
+                                            {getStatusLabel(apt.status)}
                                         </span>
                                     </div>
 
@@ -177,7 +189,7 @@ const ClientDashboard: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {apt.status === 'Pendente' && (
+                                    {(apt.status === 'pending' || apt.status === 'Pendente') && (
                                         <button className="w-full py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg text-sm font-bold transition-colors">
                                             Cancelar
                                         </button>
