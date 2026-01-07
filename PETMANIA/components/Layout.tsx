@@ -78,7 +78,7 @@ const Layout: React.FC<LayoutProps> = ({ children, darkMode, setDarkMode, userEm
         </div>
 
         {/* Page Content Scroll Area */}
-        <div className="flex-1 overflow-y-auto pb-24 lg:pb-8 print:overflow-visible print:pb-0">
+        <div className="flex-1 overflow-y-auto pb-24 lg:pb-8 print:overflow-visible print:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
           {children}
           <BirthdayCelebration />
         </div>

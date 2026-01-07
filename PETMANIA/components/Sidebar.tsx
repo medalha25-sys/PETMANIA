@@ -46,7 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOpenCheckout, isGuest = false }) =>
     });
 
     return (
-        <aside className="hidden lg:flex w-72 flex-col border-r border-gray-200 dark:border-gray-800 bg-surface-light dark:bg-surface-dark transition-colors duration-200">
+        <aside className="hidden lg:flex w-72 flex-col border-r border-gray-200 dark:border-gray-800 bg-surface-light dark:bg-surface-dark transition-colors duration-200 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
             <div className="flex h-full flex-col justify-between p-4">
                 <div className="flex flex-col gap-6">
                     <div className="flex items-center gap-3 px-2 py-2">
@@ -103,10 +103,21 @@ const Sidebar: React.FC<SidebarProps> = ({ onOpenCheckout, isGuest = false }) =>
                     </nav>
                 </div>
 
-                <div className="flex flex-col gap-4">
-
-
-                </div>
+                {/* Support Link */}
+                <a
+                    href="https://wa.me/5538984257511"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 text-slate-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-green-600 dark:hover:text-green-400 group mt-auto"
+                >
+                    <span className="material-symbols-outlined text-slate-500 group-hover:text-green-600 dark:text-slate-400 dark:group-hover:text-green-400">
+                        headset_mic
+                    </span>
+                    <div className="flex flex-col">
+                        <p className="text-sm font-medium leading-normal">Suporte</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Falar no WhatsApp</p>
+                    </div>
+                </a>
             </div>
         </aside>
     );

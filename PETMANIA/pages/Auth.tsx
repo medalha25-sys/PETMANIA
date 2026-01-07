@@ -205,7 +205,8 @@ const Auth: React.FC<AuthProps> = ({ onGuestLogin }) => {
                             )}
                         </button>
 
-                        {!isRecovery && !isRegister && (
+{/* Google Login - Always visible unless in recovery */ }
+                        { !isRecovery && (
                             <>
                                 <div className="relative flex items-center py-2">
                                     <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
@@ -224,7 +225,7 @@ const Auth: React.FC<AuthProps> = ({ onGuestLogin }) => {
                                         alt="Google"
                                         className="w-5 h-5"
                                     />
-                                    Entrar com Google
+                                    Continuar com Google
                                 </button>
                             </>
                         )}

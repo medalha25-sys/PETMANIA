@@ -29,8 +29,10 @@ const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail, onLog
         };
 
         // Initial fetch
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            updateState(session);
+        supabase.auth.getSession().then(({ data, error }) => {
+            if (!error && data?.session) {
+                updateState(data.session);
+            }
         });
 
         // Listen for changes
@@ -105,6 +107,37 @@ const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail, onLog
         }
     };
 
+    // SYSTEM UPDATE NOTIFICATION LOGIC
+    const [showNotifications, setShowNotifications] = useState(false);
+
+    // Hardcoded logic as requested
+    // Date: 10/01/2026 (DD/MM/YYYY)
+    const maintenanceEnd = new Date('2026-01-10T06:00:00');
+    const now = new Date();
+    const isMaintenanceActive = now < maintenanceEnd;
+
+    const notifications = [
+        ...(isMaintenanceActive ? [{
+            id: 'sys-update',
+            title: 'Atualização do Sistema',
+            message: 'Manutenção programada para 10/01/2026 das 00:00 às 06:00.',
+            type: 'warning'
+        }] : [])
+    ];
+
+    const unreadCount = notifications.length;
+
+    // Close notifications when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (showNotifications && !(event.target as Element).closest('.notifications-container')) {
+                setShowNotifications(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showNotifications]);
+
     return (
         <>
             <header className="sticky top-0 z-30 flex items-center justify-between gap-4 p-4 md:px-8 md:py-6 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md">
@@ -119,6 +152,56 @@ const Header: React.FC<HeaderProps> = ({ darkMode, setDarkMode, userEmail, onLog
                 </div>
 
                 <div className="flex items-center gap-4">
+                    {/* Notification Bell */}
+                    <div className="relative notifications-container">
+                        <button
+                            onClick={() => setShowNotifications(!showNotifications)}
+                            className="relative size-10 flex items-center justify-center rounded-xl bg-white dark:bg-surface-dark border border-slate-200 dark:border-gray-800 shadow-sm text-slate-600 dark:text-slate-300 hover:scale-105 transition-transform"
+                            title="Notificações"
+                        >
+                            <span className="material-symbols-outlined">notifications</span>
+                            {/* Red Badge */}
+                            {unreadCount > 0 && (
+                                <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full border border-white dark:border-surface-dark animate-pulse"></span>
+                            )}
+                        </button>
+
+                        {/* Notifications Dropdown */}
+                        {showNotifications && (
+                            <div className="absolute right-0 top-14 w-80 bg-white dark:bg-surface-dark rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                                <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-900 dark:text-white">Notificações</h3>
+                                    <span className="text-xs bg-primary/10 text-primary-dark px-2 py-1 rounded-full">{unreadCount} nova(s)</span>
+                                </div>
+                                <div className="max-h-[300px] overflow-y-auto">
+                                    {notifications.length === 0 ? (
+                                        <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+                                            <span className="material-symbols-outlined text-2xl mb-2 block opacity-50">notifications_off</span>
+                                            Nenhuma notificação no momento.
+                                        </div>
+                                    ) : (
+                                        notifications.map(notif => (
+                                            <div key={notif.id} className="p-4 border-b border-gray-100 dark:border-gray-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                                <div className="flex gap-3">
+                                                    <div className={`mt-1 size-8 rounded-full flex items-center justify-center shrink-0 ${notif.type === 'warning' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400' : 'bg-blue-100 text-blue-600'
+                                                        }`}>
+                                                        <span className="material-symbols-outlined text-sm">
+                                                            {notif.type === 'warning' ? 'warning' : 'info'}
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-sm text-slate-900 dark:text-white mb-1">{notif.title}</p>
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{notif.message}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         onClick={() => setDarkMode(!darkMode)}
                         className="size-10 flex items-center justify-center rounded-xl bg-white dark:bg-surface-dark border border-slate-200 dark:border-gray-800 shadow-sm text-slate-600 dark:text-slate-300 hover:scale-105 transition-transform"

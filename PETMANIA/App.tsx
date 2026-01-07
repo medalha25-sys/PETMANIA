@@ -33,9 +33,13 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchUserRole(session.user.id);
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!error && data?.session) {
+        setSession(data.session);
+        fetchUserRole(data.session.user.id);
+      } else {
+        setSession(null);
+      }
       setLoading(false);
     });
 
